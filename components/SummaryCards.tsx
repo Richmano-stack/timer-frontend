@@ -28,7 +28,7 @@ export const SummaryCards: React.FC<SummaryCardsProps> = ({ summary }) => {
                 </div>
             </Card>
 
-            {Object.entries(summary.statusBreakdown).map(([status, duration]) => (
+            {Object.entries(summary.statusBreakdown || {}).map(([status, duration]) => (
                 <Card key={status}>
                     <div className="text-sm font-medium text-gray-500 truncate capitalize">
                         {status.toLowerCase()}
