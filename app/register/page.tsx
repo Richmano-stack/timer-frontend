@@ -6,13 +6,15 @@ import Link from 'next/link';
 import { api } from '@/lib/api';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
-import { Card } from '@/components/ui/Card';
 import { AuthResponse } from '@/types';
+import { TimerLogo } from '@/components/ui/TimerLogo';
 
 export default function RegisterPage() {
     const router = useRouter();
 
     const [username, setUsername] = useState('');
+    const [firstName, setFirstName] = useState('');
+    const [lastName, setLastName] = useState('');
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
     const [confirmPassword, setConfirmPassword] = useState('');
@@ -31,8 +33,7 @@ export default function RegisterPage() {
         setIsLoading(true);
 
         try {
-            await api.post<AuthResponse>('/api/auth/register', { username, email, password });
-            // On success, redirect to dashboard
+            await api.post<AuthResponse>('/api/auth/register', { username, firstName, lastName, email, password });
             router.push('/dashboard');
             router.refresh();
         } catch (err: any) {
@@ -43,105 +44,129 @@ export default function RegisterPage() {
     };
 
     return (
-        <div className="min-h-screen bg-gray-50 flex flex-col justify-center py-12 sm:px-6 lg:px-8">
-            <div className="sm:mx-auto sm:w-full sm:max-w-md">
-                <h2 className="mt-6 text-center text-3xl font-extrabold text-gray-900">
-                    Create a new account
-                </h2>
-            </div>
+        <div className="min-h-screen bg-white flex flex-col items-center justify-center p-4 sm:p-6 lg:p-8">
+            <div className="w-full max-w-[450px] border border-gray-200 rounded-lg px-6 py-10 sm:px-10">
+                <div className="flex flex-col items-center mb-8">
+                    <TimerLogo />
+                    <h1 className="mt-3 text-2xl font-normal text-gray-900">Create your Timer Account</h1>
+                    <p className="mt-2 text-base text-gray-700 text-center">to continue to Timer</p>
+                </div>
 
-            <div className="mt-8 sm:mx-auto sm:w-full sm:max-w-md">
-                <Card>
-                    <form className="space-y-6" onSubmit={handleSubmit}>
+                <form onSubmit={handleSubmit} className="space-y-6">
+                    <div className="space-y-4">
                         <Input
                             id="username"
                             name="username"
                             type="text"
                             autoComplete="username"
                             required
-                            label="Username"
+                            placeholder="Username"
                             value={username}
                             onChange={(e) => setUsername(e.target.value)}
+                            className="h-12 border-gray-300 focus:border-[#1a73e8] focus:ring-1 focus:ring-[#1a73e8] rounded-[4px]"
                         />
 
+                        <Input
+                            id="firstName"
+                            name="firstName"
+                            type="text"
+                            autoComplete="firstName"
+                            required
+                            placeholder="First Name"
+                            value={firstName}
+                            onChange={(e) => setFirstName(e.target.value)}
+                            className="h-12 border-gray-300 focus:border-[#1a73e8] focus:ring-1 focus:ring-[#1a73e8] rounded-[4px]"
+                        />
+                        <Input
+                            id="lastName"
+                            name="lastName"
+                            type="text"
+                            autoComplete="lastName"
+                            required
+                            placeholder="Last Name"
+                            value={lastName}
+                            onChange={(e) => setLastName(e.target.value)}
+                            className="h-12 border-gray-300 focus:border-[#1a73e8] focus:ring-1 focus:ring-[#1a73e8] rounded-[4px]"
+                        />
+                        {/* 
                         <Input
                             id="email"
                             name="email"
                             type="email"
                             autoComplete="email"
                             required
-                            label="Email address"
+                            placeholder="Email address"
                             value={email}
                             onChange={(e) => setEmail(e.target.value)}
-                        />
+                            className="h-12 border-gray-300 focus:border-[#1a73e8] focus:ring-1 focus:ring-[#1a73e8] rounded-[4px]"
+                        /> */}
 
-                        <Input
-                            id="password"
-                            name="password"
-                            type="password"
-                            autoComplete="new-password"
-                            required
-                            label="Password"
-                            value={password}
-                            onChange={(e) => setPassword(e.target.value)}
-                        />
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                            <Input
+                                id="password"
+                                name="password"
+                                type="password"
+                                autoComplete="new-password"
+                                required
+                                placeholder="Password"
+                                value={password}
+                                onChange={(e) => setPassword(e.target.value)}
+                                className="h-12 border-gray-300 focus:border-[#1a73e8] focus:ring-1 focus:ring-[#1a73e8] rounded-[4px]"
+                            />
 
-                        <Input
-                            id="confirmPassword"
-                            name="confirmPassword"
-                            type="password"
-                            autoComplete="new-password"
-                            required
-                            label="Confirm Password"
-                            value={confirmPassword}
-                            onChange={(e) => setConfirmPassword(e.target.value)}
-                        />
-
-                        {error && (
-                            <div className="rounded-md bg-red-50 p-4">
-                                <div className="flex">
-                                    <div className="ml-3">
-                                        <h3 className="text-sm font-medium text-red-800">
-                                            Registration failed
-                                        </h3>
-                                        <div className="mt-2 text-sm text-red-700">
-                                            <p>{error}</p>
-                                        </div>
-                                    </div>
-                                </div>
-                            </div>
-                        )}
-
-                        <div>
-                            <Button
-                                type="submit"
-                                className="w-full"
-                                isLoading={isLoading}
-                            >
-                                Register
-                            </Button>
+                            <Input
+                                id="confirmPassword"
+                                name="confirmPassword"
+                                type="password"
+                                autoComplete="new-password"
+                                required
+                                placeholder="Confirm"
+                                value={confirmPassword}
+                                onChange={(e) => setConfirmPassword(e.target.value)}
+                                className="h-12 border-gray-300 focus:border-[#1a73e8] focus:ring-1 focus:ring-[#1a73e8] rounded-[4px]"
+                            />
                         </div>
-                    </form>
-
-                    <div className="mt-6">
-                        <div className="relative">
-                            <div className="absolute inset-0 flex items-center">
-                                <div className="w-full border-t border-gray-300" />
-                            </div>
-                            <div className="relative flex justify-center text-sm">
-                                <span className="px-2 bg-white text-gray-500">
-                                    Or
-                                </span>
-                            </div>
-                        </div>
-
-                        <div className="mt-6 text-center">
-                            <Link href="/login" className="font-medium text-blue-600 hover:text-blue-500">
-                                Already have an account? Sign in
-                            </Link>
-                        </div>
+                        <p className="text-xs text-gray-500 px-1">
+                            Use 8 or more characters with a mix of letters, numbers & symbols
+                        </p>
                     </div>
-                </Card>
+
+                    {error && (
+                        <div className="text-sm text-[#d93025] flex items-center space-x-1">
+                            <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+                                <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
+                            </svg>
+                            <span>{error}</span>
+                        </div>
+                    )}
+
+                    <div className="flex items-center justify-between pt-4">
+                        <Link
+                            href="/login"
+                            className="text-sm font-medium text-[#1a73e8] hover:bg-blue-50 px-2 py-2 -ml-2 rounded transition-colors"
+                        >
+                            Sign in instead
+                        </Link>
+                        <Button
+                            type="submit"
+                            isLoading={isLoading}
+                            className="bg-[#1a73e8] hover:bg-[#1b66c9] text-white px-6 h-10 rounded-[4px] font-medium transition-shadow hover:shadow-md"
+                        >
+                            Register
+                        </Button>
+                    </div>
+                </form>
+            </div>
+
+            <div className="mt-6 w-full max-w-[450px] flex justify-between text-xs text-gray-500 px-2">
+                <div className="flex space-x-4">
+                    <button className="hover:underline">English (United States)</button>
+                </div>
+                <div className="flex space-x-4">
+                    <button className="hover:underline">Help</button>
+                    <button className="hover:underline">Privacy</button>
+                    <button className="hover:underline">Terms</button>
+                </div>
             </div>
         </div>
     );

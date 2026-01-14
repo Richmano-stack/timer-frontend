@@ -1,4 +1,7 @@
-const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000';
+const IS_SERVER = typeof window === 'undefined';
+const API_URL = IS_SERVER
+    ? (process.env.NEXT_PUBLIC_API_URL || 'http://127.0.0.1:4000')
+    : ''; // Use relative path on client to hit the Next.js proxy
 
 interface FetchOptions extends RequestInit {
     headers?: Record<string, string>;
@@ -17,8 +20,12 @@ export class ApiError extends Error {
 async function fetcher<T>(endpoint: string, options: FetchOptions = {}): Promise<T> {
     const url = `${API_URL}${endpoint}`;
 
+    // Get JWT token from localStorage (only on client side)
+    const token = typeof window !== 'undefined' ? localStorage.getItem('auth_token') : null;
+
     const defaultHeaders = {
         'Content-Type': 'application/json',
+        ...(token && { 'Authorization': `Bearer ${token}` }),
     };
 
     const config: RequestInit = {
