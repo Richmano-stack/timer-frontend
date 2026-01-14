@@ -13,7 +13,7 @@ export default function LoginPage() {
     const router = useRouter();
     const searchParams = useSearchParams();
     const from = searchParams.get('from') || '/dashboard';
-    const [email, setEmail] = useState('');
+    const [identifier, setIdentifier] = useState('');
     const [password, setPassword] = useState('');
     const [error, setError] = useState('');
     const [isLoading, setIsLoading] = useState(false);
@@ -23,24 +23,13 @@ export default function LoginPage() {
         setError('');
         setIsLoading(true);
 
-        // Clear any existing token before login to prevent sending invalid tokens
-        localStorage.removeItem('auth_token');
-
         try {
-            console.log('Attempting login for:', email);
+            console.log('Attempting login for:', identifier);
             const response = await api.post<AuthResponse>('/api/auth/login', {
-                email,
+                identifier,
                 password
             });
             console.log('Login successful:', response);
-
-            // Store JWT token in localStorage if provided
-            if (response.token) {
-                localStorage.setItem('auth_token', response.token);
-                console.log('Auth token stored in localStorage');
-            }
-
-            console.log('Redirecting to:', from);
             router.push(from);
             router.refresh();
         } catch (err: any) {
@@ -63,14 +52,14 @@ export default function LoginPage() {
                 <form onSubmit={handleSubmit} className="space-y-6">
                     <div className="space-y-4">
                         <Input
-                            id="email"
-                            name="email"
-                            type="email"
-                            autoComplete="email"
+                            id="identifier"
+                            name="identifier"
+                            type="text"
+                            autoComplete="identifier"
                             required
                             placeholder="Email address"
-                            value={email}
-                            onChange={(e) => setEmail(e.target.value)}
+                            value={identifier}
+                            onChange={(e) => setIdentifier(e.target.value)}
                             className="h-12 border-gray-300 focus:border-[#1a73e8] focus:ring-1 focus:ring-[#1a73e8] rounded-[4px]"
                         />
 
