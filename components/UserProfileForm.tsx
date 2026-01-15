@@ -8,6 +8,7 @@ import { Input } from '@/components/ui/Input';
 import { Card } from '@/components/ui/Card';
 import { User } from '@/types';
 import { Camera, Mail, User as UserIcon, Calendar } from 'lucide-react';
+import { ClientDate } from '@/components/ClientDate';
 
 interface UserProfileFormProps {
     user: User;
@@ -18,6 +19,11 @@ export const UserProfileForm: React.FC<UserProfileFormProps> = ({ user }) => {
     const [username, setUsername] = useState(user.username);
     // Email is not in User interface, so we default to empty string or handle it if it exists in runtime
     const [email, setEmail] = useState((user as any).email || '');
+    const [firstName, setFirstName] = useState((user as any).firstName || '');
+    const [lastName, setLastName] = useState((user as any).lastName || '');
+    const [newPassword, setNewPassword] = useState('');
+    const [confirmPassword, setConfirmPassword] = useState('');
+
     const [isLoading, setIsLoading] = useState(false);
     const [message, setMessage] = useState<{ type: 'success' | 'error', text: string } | null>(null);
 
@@ -26,9 +32,22 @@ export const UserProfileForm: React.FC<UserProfileFormProps> = ({ user }) => {
         setIsLoading(true);
         setMessage(null);
 
+        if (newPassword && newPassword !== confirmPassword) {
+            setMessage({ type: 'error', text: 'Passwords do not match' });
+            return;
+        }
+
         try {
-            await api.put('/api/auth/me', { username, email });
+            await api.put('/api/auth/me', {
+                username,
+                email,
+                firstName,
+                lastName,
+                ...(newPassword ? { password: newPassword } : {})
+            });
             setMessage({ type: 'success', text: 'Profile updated successfully' });
+            setNewPassword('');
+            setConfirmPassword('');
             router.refresh();
         } catch (error: any) {
             setMessage({ type: 'error', text: error.message || 'Failed to update profile' });
@@ -54,13 +73,32 @@ export const UserProfileForm: React.FC<UserProfileFormProps> = ({ user }) => {
                         <p className="text-sm text-gray-500 capitalize">{user.role}</p>
                         <div className="flex items-center mt-2 text-xs text-gray-400">
                             <Calendar size={12} className="mr-1" />
-                            <span>Member since {new Date(user.createdAt).toLocaleDateString()}</span>
+                            <span>Member since <ClientDate date={user.createdAt} options={{ year: 'numeric', month: 'numeric', day: 'numeric' }} /></span>
                         </div>
                     </div>
                 </div>
 
                 <form onSubmit={handleSubmit} className="space-y-6 max-w-xl">
                     <div className="space-y-4">
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                            <div>
+                                <label className="block text-sm font-medium text-gray-700 mb-1">First Name</label>
+                                <Input
+                                    value={firstName}
+                                    onChange={(e) => setFirstName(e.target.value)}
+                                    placeholder="First Name"
+                                />
+                            </div>
+                            <div>
+                                <label className="block text-sm font-medium text-gray-700 mb-1">Last Name</label>
+                                <Input
+                                    value={lastName}
+                                    onChange={(e) => setLastName(e.target.value)}
+                                    placeholder="Last Name"
+                                />
+                            </div>
+                        </div>
+
                         <div>
                             <label className="block text-sm font-medium text-gray-700 mb-1">Username</label>
                             <div className="relative">
@@ -76,16 +114,6 @@ export const UserProfileForm: React.FC<UserProfileFormProps> = ({ user }) => {
                             </div>
                         </div>
 
-                        {/* Assuming User type has email, if not I should check types/index.ts */}
-                        {/* types/index.ts User interface: id, username, role, createdAt, updatedAt, isActive. No email? */}
-                        {/* I'll check types/index.ts again. */}
-
-                        {/* 
-                           Note: The original code had logic to check for email. 
-                           I'm keeping the email field but making it look nicer.
-                           If the backend doesn't support email updates, this might fail or just not save.
-                           But visually it will be consistent.
-                        */}
                         <div>
                             <label className="block text-sm font-medium text-gray-700 mb-1">Email Address</label>
                             <div className="relative">
@@ -99,6 +127,30 @@ export const UserProfileForm: React.FC<UserProfileFormProps> = ({ user }) => {
                                     className="pl-10"
                                     placeholder="your@email.com"
                                 />
+                            </div>
+                        </div>
+
+                        <div className="pt-4 border-t border-gray-100">
+                            <h3 className="text-sm font-medium text-gray-900 mb-3">Change Password</h3>
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                                <div>
+                                    <label className="block text-sm font-medium text-gray-700 mb-1">New Password</label>
+                                    <Input
+                                        type="password"
+                                        value={newPassword}
+                                        onChange={(e) => setNewPassword(e.target.value)}
+                                        placeholder="New Password"
+                                    />
+                                </div>
+                                <div>
+                                    <label className="block text-sm font-medium text-gray-700 mb-1">Confirm Password</label>
+                                    <Input
+                                        type="password"
+                                        value={confirmPassword}
+                                        onChange={(e) => setConfirmPassword(e.target.value)}
+                                        placeholder="Confirm Password"
+                                    />
+                                </div>
                             </div>
                         </div>
                     </div>

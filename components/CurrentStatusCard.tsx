@@ -5,6 +5,8 @@ import { Card } from '@/components/ui/Card';
 import { Status, StatusType } from '@/types';
 import { Clock, Coffee, Monitor, Phone, UserCheck, UserX } from 'lucide-react';
 
+import { ClientDate } from '@/components/ClientDate';
+
 interface CurrentStatusCardProps {
     status: Status | null;
 }
@@ -80,7 +82,7 @@ export const CurrentStatusCard: React.FC<CurrentStatusCardProps> = ({ status }) 
                 {status?.start_time && currentStatus !== 'off_duty' && (
                     <div className="mt-6 flex items-center text-sm text-gray-500">
                         <Clock size={14} className="mr-1.5" />
-                        Started at {new Date(Number(status.start_time)).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                        Started at <ClientDate date={Number(status.start_time)} options={{ hour: '2-digit', minute: '2-digit' }} />
                     </div>
                 )}
             </div>

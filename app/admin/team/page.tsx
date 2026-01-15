@@ -33,9 +33,12 @@ export default async function TeamStatusPage() {
     }
 
     return (
-        <div className="space-y-6">
-            <h1 className="text-2xl font-semibold text-gray-900">Team Status</h1>
-            <TeamStatusTable teamStatus={teamStatus} />
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+            <div className="mb-8">
+                <h1 className="text-2xl font-bold text-gray-900">Team Status</h1>
+                <p className="text-sm text-gray-500">Monitor real-time status of all team members.</p>
+            </div>
+            <TeamStatusTable initialTeamStatus={teamStatus} />
         </div>
     );
 }
