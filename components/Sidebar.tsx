@@ -18,6 +18,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ user }) => {
         { name: 'Dashboard', href: '/dashboard' },
         { name: 'Profile', href: '/profile' },
         { name: 'Status History', href: '/status/history' },
+        { name: 'Analytics', href: '/analytics' },
     ];
 
     if (user.role === 'admin' || user.role === 'supervisor') {

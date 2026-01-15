@@ -1,10 +1,10 @@
 import { cookies } from 'next/headers';
 import { api } from '@/lib/api';
 import { StatusHistoryItem } from '@/types';
-import { StatusHistoryTable } from '@/components/StatusHistoryTable';
-import { History } from 'lucide-react';
+import { AnalyticsDashboard } from '@/components/AnalyticsDashboard';
+import { BarChart3 } from 'lucide-react';
 
-export default async function StatusHistoryPage({
+export default async function AnalyticsPage({
     searchParams,
 }: {
     searchParams: Promise<{ [key: string]: string | string[] | undefined }>
@@ -13,18 +13,17 @@ export default async function StatusHistoryPage({
     const cookieHeader = cookieStore.toString();
     const resolvedSearchParams = await searchParams;
 
-    const page = Number(resolvedSearchParams.page) || 1;
     const startDate = resolvedSearchParams.startDate as string || '';
     const endDate = resolvedSearchParams.endDate as string || '';
-    const limit = 10;
 
     let history: StatusHistoryItem[] = [];
-    let total = 0;
 
     try {
         const queryParams = new URLSearchParams();
-        queryParams.set('page', page.toString());
-        queryParams.set('limit', limit.toString());
+        // For analytics, we might want more data than just 10 items.
+        // Let's fetch a larger set or a specific analytics endpoint if it exists.
+        // Based on previous audit, we use /api/status/history with filters.
+        queryParams.set('limit', '1000');
         if (startDate) queryParams.set('startDate', startDate);
         if (endDate) queryParams.set('endDate', endDate);
 
@@ -32,36 +31,29 @@ export default async function StatusHistoryPage({
             headers: { Cookie: cookieHeader }
         });
 
-        // Handle both array response (legacy) and paginated response
         if (Array.isArray(response)) {
             history = response;
-            total = response.length;
         } else {
             history = response.data;
-            total = response.meta.total;
         }
     } catch (error) {
-        console.error('Failed to fetch history', error);
+        console.error('Failed to fetch history for analytics', error);
     }
-
-    const totalPages = Math.ceil(total / limit);
 
     return (
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
             <div className="mb-8 flex items-center space-x-3">
                 <div className="p-2 bg-indigo-600 rounded-lg shadow-sm">
-                    <History className="text-white" size={24} />
+                    <BarChart3 className="text-white" size={24} />
                 </div>
                 <div>
-                    <h1 className="text-2xl font-bold text-gray-900">Status History</h1>
-                    <p className="text-sm text-gray-500">View your past status changes and durations.</p>
+                    <h1 className="text-2xl font-bold text-gray-900">Analytics & Reporting</h1>
+                    <p className="text-sm text-gray-500">Analyze your time distribution and productivity trends.</p>
                 </div>
             </div>
 
-            <StatusHistoryTable
+            <AnalyticsDashboard
                 history={history}
-                currentPage={page}
-                totalPages={totalPages || 1}
                 initialStartDate={startDate}
                 initialEndDate={endDate}
             />

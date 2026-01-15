@@ -16,6 +16,9 @@ interface EditUserModalProps {
 export const EditUserModal: React.FC<EditUserModalProps> = ({ user, onClose }) => {
     const router = useRouter();
     const [username, setUsername] = useState(user.username);
+    const [firstName, setFirstName] = useState((user as any).firstName || '');
+    const [lastName, setLastName] = useState((user as any).lastName || '');
+    const [email, setEmail] = useState((user as any).email || '');
     const [role, setRole] = useState(user.role);
     const [password, setPassword] = useState(''); // Optional password reset
     const [isLoading, setIsLoading] = useState(false);
@@ -27,7 +30,13 @@ export const EditUserModal: React.FC<EditUserModalProps> = ({ user, onClose }) =
         setError('');
 
         try {
-            const payload: any = { username, role };
+            const payload: any = {
+                username,
+                role,
+                firstName,
+                lastName,
+                email
+            };
             if (password) payload.password = password;
 
             await api.put(`/api/admin/users/${user.id}`, payload);
@@ -43,6 +52,24 @@ export const EditUserModal: React.FC<EditUserModalProps> = ({ user, onClose }) =
     return (
         <Modal title="Edit User" isOpen={true} onClose={onClose}>
             <form onSubmit={handleSubmit} className="space-y-4 mt-4">
+                <div className="grid grid-cols-2 gap-4">
+                    <Input
+                        label="First Name"
+                        value={firstName}
+                        onChange={(e) => setFirstName(e.target.value)}
+                    />
+                    <Input
+                        label="Last Name"
+                        value={lastName}
+                        onChange={(e) => setLastName(e.target.value)}
+                    />
+                </div>
+                <Input
+                    label="Email"
+                    type="email"
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                />
                 <Input
                     label="Username"
                     value={username}

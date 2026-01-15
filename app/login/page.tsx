@@ -73,6 +73,18 @@ export default function LoginPage() {
                             onChange={(e) => setPassword(e.target.value)}
                             className="h-12 border-gray-300 focus:border-[#1a73e8] focus:ring-1 focus:ring-[#1a73e8] rounded-[4px]"
                         />
+
+                        <div className="flex items-center">
+                            <input
+                                id="remember-me"
+                                name="remember-me"
+                                type="checkbox"
+                                className="h-4 w-4 text-[#1a73e8] focus:ring-[#1a73e8] border-gray-300 rounded"
+                            />
+                            <label htmlFor="remember-me" className="ml-2 block text-sm text-gray-900">
+                                Remember me
+                            </label>
+                        </div>
                     </div>
 
                     {error && (
