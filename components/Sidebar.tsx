@@ -21,10 +21,11 @@ export const Sidebar: React.FC<SidebarProps> = ({ user }) => {
     ];
 
     if (user.role === 'admin' || user.role === 'supervisor') {
-        navigation.push(
-            { name: 'Team Status', href: '/admin/team' },
-            { name: 'User Management', href: '/admin/users' }
-        );
+        navigation.push({ name: 'Team Status', href: '/admin/team' });
+    }
+
+    if (user.role === 'admin') {
+        navigation.push({ name: 'User Management', href: '/admin/users' });
     }
 
     return (

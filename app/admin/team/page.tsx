@@ -3,9 +3,25 @@ import { api } from '@/lib/api';
 import { TeamStatus } from '@/types';
 import { TeamStatusTable } from '@/components/TeamStatusTable';
 
+import { redirect } from 'next/navigation';
+import { User } from '@/types';
+
 export default async function TeamStatusPage() {
     const cookieStore = await cookies();
     const cookieHeader = cookieStore.toString();
+
+    let currentUser: User | null = null;
+    try {
+        currentUser = await api.get<User>('/api/auth/me', {
+            headers: { Cookie: cookieHeader }
+        });
+    } catch (error) {
+        redirect('/login');
+    }
+
+    if (!currentUser || (currentUser.role !== 'admin' && currentUser.role !== 'supervisor')) {
+        redirect('/dashboard');
+    }
 
     let teamStatus: TeamStatus[] = [];
     try {
