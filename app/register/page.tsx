@@ -88,7 +88,7 @@ export default function RegisterPage() {
                             onChange={(e) => setLastName(e.target.value)}
                             className="h-12 border-gray-300 focus:border-[#1a73e8] focus:ring-1 focus:ring-[#1a73e8] rounded-[4px]"
                         />
-                        {/* 
+                        {/*
                         <Input
                             id="email"
                             name="email"
@@ -99,8 +99,8 @@ export default function RegisterPage() {
                             value={email}
                             onChange={(e) => setEmail(e.target.value)}
                             className="h-12 border-gray-300 focus:border-[#1a73e8] focus:ring-1 focus:ring-[#1a73e8] rounded-[4px]"
-                        />}
-
+                        />
+                        */}
                         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                             <Input
                                 id="password"
