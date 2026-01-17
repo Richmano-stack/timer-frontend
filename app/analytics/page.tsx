@@ -4,6 +4,8 @@ import { StatusHistoryItem } from '@/types';
 import { AnalyticsDashboard } from '@/components/AnalyticsDashboard';
 import { BarChart3 } from 'lucide-react';
 
+import { redirect } from 'next/navigation';
+
 export default async function AnalyticsPage({
     searchParams,
 }: {
@@ -12,6 +14,14 @@ export default async function AnalyticsPage({
     const cookieStore = await cookies();
     const cookieHeader = cookieStore.toString();
     const resolvedSearchParams = await searchParams;
+
+    try {
+        await api.get('/api/auth/me', {
+            headers: { Cookie: cookieHeader }
+        });
+    } catch (error) {
+        redirect('/login');
+    }
 
     const startDate = resolvedSearchParams.startDate as string || '';
     const endDate = resolvedSearchParams.endDate as string || '';

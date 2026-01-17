@@ -4,6 +4,8 @@ import { StatusHistoryItem } from '@/types';
 import { StatusHistoryTable } from '@/components/StatusHistoryTable';
 import { History } from 'lucide-react';
 
+import { redirect } from 'next/navigation';
+
 export default async function StatusHistoryPage({
     searchParams,
 }: {
@@ -12,6 +14,14 @@ export default async function StatusHistoryPage({
     const cookieStore = await cookies();
     const cookieHeader = cookieStore.toString();
     const resolvedSearchParams = await searchParams;
+
+    try {
+        await api.get('/api/auth/me', {
+            headers: { Cookie: cookieHeader }
+        });
+    } catch (error) {
+        redirect('/login');
+    }
 
     const page = Number(resolvedSearchParams.page) || 1;
     const startDate = resolvedSearchParams.startDate as string || '';

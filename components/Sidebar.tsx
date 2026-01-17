@@ -17,12 +17,12 @@ export const Sidebar: React.FC<SidebarProps> = ({ user }) => {
     const navigation = [
         { name: 'Dashboard', href: '/dashboard' },
         { name: 'Profile', href: '/profile' },
-        { name: 'Status History', href: '/status/history' },
+        { name: 'Status History', href: '/history' },
         { name: 'Analytics', href: '/analytics' },
     ];
 
     if (user.role === 'admin' || user.role === 'supervisor') {
-        navigation.push({ name: 'Team Status', href: '/admin/team' });
+        navigation.push({ name: 'Team Status', href: '/team' });
     }
 
     if (user.role === 'admin') {

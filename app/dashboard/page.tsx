@@ -7,6 +7,8 @@ import { StatusSwitcher } from '@/components/StatusSwitcher';
 import { SummaryCards } from '@/components/SummaryCards';
 import { LayoutDashboard } from 'lucide-react';
 
+import { redirect } from 'next/navigation';
+
 export default async function DashboardPage({
     searchParams,
 }: {
@@ -16,6 +18,14 @@ export default async function DashboardPage({
     const cookieHeader = cookieStore.toString();
     const resolvedSearchParams = await searchParams;
     const view = resolvedSearchParams.view as string || 'today';
+
+    try {
+        await api.get('/api/auth/me', {
+            headers: { Cookie: cookieHeader }
+        });
+    } catch (error) {
+        redirect('/login');
+    }
 
     let currentStatus: Status | null = null;
     try {
