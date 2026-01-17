@@ -3,6 +3,7 @@ import { api } from '@/lib/api';
 import { User } from '@/types';
 import { UserProfileForm } from '@/components/UserProfileForm';
 import { UserCircle } from 'lucide-react';
+import { redirect } from 'next/navigation';
 
 export default async function ProfilePage() {
     const cookieStore = await cookies();
@@ -14,16 +15,11 @@ export default async function ProfilePage() {
             headers: { Cookie: cookieHeader }
         });
     } catch (error) {
-        console.error('Failed to fetch user', error);
+        redirect('/login');
     }
 
     if (!user) {
-        return (
-            <div className="flex flex-col items-center justify-center min-h-[50vh]">
-                <div className="text-red-500 mb-2">Error loading profile</div>
-                <div className="text-gray-500 text-sm">Please try refreshing the page</div>
-            </div>
-        );
+        redirect('/login');
     }
 
     return (

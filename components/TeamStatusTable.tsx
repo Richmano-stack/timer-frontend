@@ -7,6 +7,7 @@ import { api } from '@/lib/api';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
 import { Search, RefreshCw, Filter } from 'lucide-react';
+import { ClientDate } from '@/components/ClientDate';
 
 interface TeamStatusTableProps {
     initialTeamStatus: TeamStatus[];
