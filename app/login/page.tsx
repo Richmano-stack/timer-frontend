@@ -1,136 +1,94 @@
 'use client';
 
-import React, { useState } from 'react';
+import { useActionState, useEffect } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
-import { api } from '@/lib/api';
+import { loginAction, ActionState } from './actions';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
-import { AuthResponse } from '@/types';
 import { TimerLogo } from '@/components/ui/TimerLogo';
+
+const initialState: ActionState = {};
 
 export default function LoginPage() {
     const router = useRouter();
     const searchParams = useSearchParams();
     const from = searchParams.get('from') || '/dashboard';
-    const [identifier, setIdentifier] = useState('');
-    const [password, setPassword] = useState('');
-    const [error, setError] = useState('');
-    const [isLoading, setIsLoading] = useState(false);
-    const handleSubmit = async (e: React.FormEvent) => {
-        e.preventDefault();
-        setError('');
-        setIsLoading(true);
 
-        try {
-            console.log('Attempting login for:', identifier);
-            const response = await api.post<AuthResponse>('/api/auth/login', {
-                identifier,
-                password
-            });
-            console.log('Login successful:', response);
+    const [state, formAction, isPending] = useActionState(loginAction, initialState);
+
+    useEffect(() => {
+        if (state.success) {
             router.push(from);
             router.refresh();
-        } catch (err: any) {
-            console.error('Login failed:', err);
-            setError(err.message || 'Invalid credentials');
-        } finally {
-            setIsLoading(false);
         }
-    };
+    }, [state.success, router, from]);
 
     return (
-        <div className="min-h-screen bg-white flex flex-col items-center justify-center p-4 sm:p-6 lg:p-8">
-            <div className="w-full max-w-[450px] border border-gray-200 rounded-lg px-6 py-10 sm:px-10">
-                <div className="flex flex-col items-center mb-8">
-                    <TimerLogo />
-                    <h1 className="mt-3 text-2xl font-normal text-gray-900">Sign in</h1>
-                    <p className="mt-2 text-base text-gray-700">Use your Timer Account</p>
-                </div>
-
-                <form onSubmit={handleSubmit} className="space-y-6">
-                    <div className="space-y-4">
-                        <Input
-                            id="identifier"
-                            name="identifier"
-                            type="text"
-                            autoComplete="identifier"
-                            required
-                            placeholder="Email address"
-                            value={identifier}
-                            onChange={(e) => setIdentifier(e.target.value)}
-                            className="h-12 border-gray-300 focus:border-[#1a73e8] focus:ring-1 focus:ring-[#1a73e8] rounded-[4px]"
-                        />
-
-                        <Input
-                            id="password"
-                            name="password"
-                            type="password"
-                            autoComplete="current-password"
-                            required
-                            placeholder="Password"
-                            value={password}
-                            onChange={(e) => setPassword(e.target.value)}
-                            className="h-12 border-gray-300 focus:border-[#1a73e8] focus:ring-1 focus:ring-[#1a73e8] rounded-[4px]"
-                        />
-
-                        <div className="flex items-center">
-                            <input
-                                id="remember-me"
-                                name="remember-me"
-                                type="checkbox"
-                                className="h-4 w-4 text-[#1a73e8] focus:ring-[#1a73e8] border-gray-300 rounded"
-                            />
-                            <label htmlFor="remember-me" className="ml-2 block text-sm text-gray-900">
-                                Remember me
-                            </label>
+        <div className="min-h-screen flex flex-col md:flex-row bg-white">
+            <div className="flex-1 flex items-center justify-center p-6 md:p-12">
+                <div className="w-full max-w-[480px] bg-card-bg p-10 rounded-card shadow-lg border border-input-border">
+                    <div className="mb-10 text-center md:text-left">
+                        <div className="md:hidden flex justify-center mb-6">
+                            <TimerLogo className="w-10 h-10 text-primary-action" />
                         </div>
+                        <h2 className="text-3xl font-bold text-text-main">Sign in</h2>
+                        <p className="mt-2 text-text-muted">
+                            Enter your credentials to access your account
+                        </p>
                     </div>
 
-                    {error && (
-                        <div className="text-sm text-[#d93025] flex items-center space-x-1">
-                            <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
-                                <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
-                            </svg>
-                            <span>{error}</span>
+                    <form action={formAction} className="space-y-6">
+                        <Input
+                            label="Email or Username"
+                            name="identifier"
+                            placeholder="name@company.com"
+                            error={state.fieldErrors?.identifier?.[0]}
+                            required
+                        />
+
+                        <div className="space-y-1">
+                            <Input
+                                label="Password"
+                                name="password"
+                                type="password"
+                                placeholder="••••••••"
+                                error={state.fieldErrors?.password?.[0]}
+                                required
+                            />
+                            <div className="flex justify-end">
+                                <Link
+                                    href="/forgot-password"
+                                    className="text-sm font-medium text-text-muted hover:text-primary-action transition-colors"
+                                >
+                                    Forgot password?
+                                </Link>
+                            </div>
                         </div>
-                    )}
 
-                    <div className="flex flex-col space-y-4">
-                        <Link
-                            href="/forgot-password"
-                            className="text-sm font-medium text-[#1a73e8] hover:text-[#174ea6] w-fit"
-                        >
-                            Forgot password?
-                        </Link>
+                        {state.error && (
+                            <div className="p-3 bg-error/10 border border-error/20 rounded-input flex items-center space-x-2 text-error text-sm">
+                                <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+                                    <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
+                                </svg>
+                                <span>{state.error}</span>
+                            </div>
+                        )}
 
-                        <div className="flex items-center justify-between pt-4">
+                        <Button type="submit" isLoading={isPending} className='shadow-xl'>
+                            Sign in
+                        </Button>
+
+                        {/*                         <p className="text-center text-sm text-text-muted">
+                            Don&apos;t have an account?{' '}
                             <Link
                                 href="/register"
-                                className="text-sm font-medium text-[#1a73e8] hover:bg-blue-50 px-2 py-2 -ml-2 rounded transition-colors"
+                                className="font-semibold text-primary-action hover:underline"
                             >
                                 Create account
                             </Link>
-                            <Button
-                                type="submit"
-                                isLoading={isLoading}
-                                className="bg-[#1a73e8] hover:bg-[#1b66c9] text-white px-6 h-10 rounded-[4px] font-medium transition-shadow hover:shadow-md"
-                            >
-                                Sign in
-                            </Button>
-                        </div>
-                    </div>
-                </form>
-            </div>
-
-            <div className="mt-6 w-full max-w-[450px] flex justify-between text-xs text-gray-500 px-2">
-                <div className="flex space-x-4">
-                    <button className="hover:underline">English (United States)</button>
-                </div>
-                <div className="flex space-x-4">
-                    <button className="hover:underline">Help</button>
-                    <button className="hover:underline">Privacy</button>
-                    <button className="hover:underline">Terms</button>
+                        </p> */}
+                    </form>
                 </div>
             </div>
         </div>

@@ -1,13 +1,18 @@
 import React from 'react';
 
-export const TimerLogo: React.FC = () => {
+export const TimerLogo = ({ className = "" }: { className?: string }) => {
     return (
-        <div className="flex justify-center items-center space-x-0.5 select-none">
-            <span className="text-2xl font-medium tracking-tight text-[#4285F4]">T</span>
-            <span className="text-2xl font-medium tracking-tight text-[#EA4335]">i</span>
-            <span className="text-2xl font-medium tracking-tight text-[#FBBC05]">m</span>
-            <span className="text-2xl font-medium tracking-tight text-[#4285F4]">e</span>
-            <span className="text-2xl font-medium tracking-tight text-[#34A853]">r</span>
-        </div>
+        <svg
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            className={className}
+        >
+            <circle cx="12" cy="12" r="10" />
+            <polyline points="12 6 12 12 16 14" />
+        </svg>
     );
 };
