@@ -1,18 +1,14 @@
 'use client';
 
 import React, { useState } from 'react';
-import { useRouter } from 'next/navigation';
+import { useRouter, usePathname, useSearchParams } from 'next/navigation';
 import { api } from '@/lib/api';
 import { Button } from '@/components/ui/Button';
 import { User } from '@/types';
 import { CreateUserModal } from './CreateUserModal';
 import { EditUserModal } from './EditUserModal';
 
-interface UsersTableProps {
-    users: User[];
-}
 
-import { useRouter, usePathname, useSearchParams } from 'next/navigation';
 import { Search, Filter, UserPlus, Edit2, UserX, ChevronLeft, ChevronRight } from 'lucide-react';
 import { Input } from '@/components/ui/Input';
 

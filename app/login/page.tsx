@@ -1,137 +1,204 @@
 'use client';
 
-import React, { useState } from 'react';
-import { useRouter, useSearchParams } from 'next/navigation';
+import Image from 'next/image';
 import Link from 'next/link';
-import { api } from '@/lib/api';
-import { Button } from '@/components/ui/Button';
-import { Input } from '@/components/ui/Input';
-import { AuthResponse } from '@/types';
-import { TimerLogo } from '@/components/ui/TimerLogo';
+import { useRouter } from 'next/navigation';
+import { useForm } from 'react-hook-form';
+import { zodResolver } from '@hookform/resolvers/zod';
+import * as z from 'zod';
+
+// 1. Decoupled Validation Schema
+const loginSchema = z.object({
+    identifier: z.string()
+        .min(1, 'Identifier is required')
+        .refine((val) => {
+            const emailRegex = /^[a-zA-Z0-9+_.-]+@[a-zA-Z0-9.-]+$/;
+            const userRegex = /^[a-z0-9_-]{3,15}$/;
+            return emailRegex.test(val) || userRegex.test(val);
+        }, { message: 'Invalid email or username format' }),
+    password: z.string().min(6, 'Security protocol requires 12+ characters'),
+    remember_me: z.boolean().optional(),
+});
+
+type LoginSchema = z.infer<typeof loginSchema>;
 
 export default function LoginPage() {
     const router = useRouter();
-    const searchParams = useSearchParams();
-    const from = searchParams.get('from') || '/dashboard';
-    const [identifier, setIdentifier] = useState('');
-    const [password, setPassword] = useState('');
-    const [error, setError] = useState('');
-    const [isLoading, setIsLoading] = useState(false);
-    const handleSubmit = async (e: React.FormEvent) => {
-        e.preventDefault();
-        setError('');
-        setIsLoading(true);
 
+    // 2. Optimized Form Hook
+    const {
+        register,
+        handleSubmit,
+        setError,
+        formState: { errors, isSubmitting },
+    } = useForm<LoginSchema>({
+        resolver: zodResolver(loginSchema),
+        defaultValues: {
+            identifier: '',
+            password: '',
+            remember_me: false,
+        }
+    });
+
+    // 3. Idempotent Submission Handler
+    const onSubmit = async (data: LoginSchema) => {
         try {
-            console.log('Attempting login for:', identifier);
-            const response = await api.post<AuthResponse>('/api/auth/login', {
-                identifier,
-                password
+            const response = await fetch('/api/v1/auth/login', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                credentials: 'include',
+                body: JSON.stringify(data),
             });
-            console.log('Login successful:', response);
-            router.push(from);
-            router.refresh();
-        } catch (err: any) {
-            console.error('Login failed:', err);
-            setError(err.message || 'Invalid credentials');
-        } finally {
-            setIsLoading(false);
+
+            if (!response.ok) {
+                const errorData = await response.json();
+                // Handle Rate Limiting (429) specifically
+                const message = response.status === 429
+                    ? 'Rate limit exceeded. Try again in 15m.'
+                    : errorData.message || 'Authentication failed.';
+
+                setError('root.serverError', {
+                    type: 'manual',
+                    message
+                });
+                return;
+            }
+
+            router.push('/dashboard');
+        } catch (err) {
+            setError('root.serverError', {
+                type: 'manual',
+                message: 'Network infrastructure failure.'
+            });
         }
     };
 
     return (
-        <div className="min-h-screen bg-white flex flex-col items-center justify-center p-4 sm:p-6 lg:p-8">
-            <div className="w-full max-w-[450px] border border-gray-200 rounded-lg px-6 py-10 sm:px-10">
-                <div className="flex flex-col items-center mb-8">
-                    <TimerLogo />
-                    <h1 className="mt-3 text-2xl font-normal text-gray-900">Sign in</h1>
-                    <p className="mt-2 text-base text-gray-700">Use your Timer Account</p>
+        <div className="min-h-screen flex flex-col items-center justify-center bg-[#F9F9F9] text-[#000000] font-sans p-4">
+
+            {/* Header Branding */}
+            <div className="mb-8">
+                <div className="w-12 h-12 relative">
+                    <Image
+                        src="/assets/logo-dark.svg"
+                        alt="Nexuma Logo"
+                        fill
+                        className="object-contain"
+                        onError={(e) => {
+                            e.currentTarget.style.display = 'none';
+                        }}
+                    />
+                    <span className="sr-only">Nexuma</span>
+                </div>
+            </div>
+
+            {/* Login Module */}
+            <div
+                className="w-full max-w-[480px] bg-white rounded-[24px] p-8 md:p-16"
+                style={{ boxShadow: '0px 10px 40px rgba(0,0,0,0.05)' }}
+            >
+                <div className="mb-8 text-center">
+                    <p className="text-xs font-bold tracking-widest uppercase text-[#666666] mb-2">Access System</p>
+                    <h1 className="text-3xl font-bold mb-2 tracking-tight">Welcome Back</h1>
+                    <p className="text-[#666666] text-sm">Secure authentication for Nexuma Global infrastructure.</p>
                 </div>
 
-                <form onSubmit={handleSubmit} className="space-y-6">
-                    <div className="space-y-4">
-                        <Input
+                {errors.root?.serverError && (
+                    <div className="mb-6 p-3 bg-[#D32F2F]/10 border border-[#D32F2F]/20 rounded-lg text-[#D32F2F] text-sm text-center">
+                        {errors.root.serverError.message}
+                    </div>
+                )}
+
+                <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
+
+                    {/* Identifier Field */}
+                    <div className="space-y-1.5">
+                        <label htmlFor="identifier" className="block text-sm font-medium text-[#000000]">
+                            Email or Username
+                        </label>
+                        <input
                             id="identifier"
-                            name="identifier"
                             type="text"
-                            autoComplete="identifier"
-                            required
-                            placeholder="Email address"
-                            value={identifier}
-                            onChange={(e) => setIdentifier(e.target.value)}
-                            className="h-12 border-gray-300 focus:border-[#1a73e8] focus:ring-1 focus:ring-[#1a73e8] rounded-[4px]"
+                            placeholder="admin@nexuma.com"
+                            {...register('identifier')}
+                            className={`
+                w-full px-4 py-3 rounded-[12px] bg-[#F9F9F9] border transition-all duration-200 outline-none
+                ${errors.identifier
+                                    ? 'border-[#D32F2F] focus:ring-1 focus:ring-[#D32F2F]'
+                                    : 'border-transparent focus:border-[#000000] focus:bg-white hover:bg-[#F0F0F0]'
+                                }
+              `}
                         />
+                        {errors.identifier && (
+                            <p className="text-xs text-[#D32F2F] mt-1">{errors.identifier.message}</p>
+                        )}
+                    </div>
 
-                        <Input
+                    {/* Password Field */}
+                    <div className="space-y-1.5">
+                        <label htmlFor="password" className="block text-sm font-medium text-[#000000]">
+                            Password
+                        </label>
+                        <input
                             id="password"
-                            name="password"
                             type="password"
-                            autoComplete="current-password"
-                            required
-                            placeholder="Password"
-                            value={password}
-                            onChange={(e) => setPassword(e.target.value)}
-                            className="h-12 border-gray-300 focus:border-[#1a73e8] focus:ring-1 focus:ring-[#1a73e8] rounded-[4px]"
+                            placeholder="••••••••"
+                            {...register('password')}
+                            className={`
+                w-full px-4 py-3 rounded-[12px] bg-[#F9F9F9] border transition-all duration-200 outline-none
+                ${errors.password
+                                    ? 'border-[#D32F2F] focus:ring-1 focus:ring-[#D32F2F]'
+                                    : 'border-transparent focus:border-[#000000] focus:bg-white hover:bg-[#F0F0F0]'
+                                }
+              `}
                         />
+                        {errors.password ? (
+                            <p className="text-xs text-[#D32F2F] mt-1">{errors.password.message}</p>
+                        ) : (
+                            <p className="text-xs text-[#666666] mt-1">Minimum 6 characters required.</p>
+                        )}
+                    </div>
 
+                    {/* Remember Me & Forgot Password */}
+                    <div className="flex items-center justify-between">
                         <div className="flex items-center">
                             <input
-                                id="remember-me"
-                                name="remember-me"
+                                id="remember_me"
                                 type="checkbox"
-                                className="h-4 w-4 text-[#1a73e8] focus:ring-[#1a73e8] border-gray-300 rounded"
+                                {...register('remember_me')}
+                                className="h-4 w-4 text-black border-gray-300 rounded focus:ring-black"
                             />
-                            <label htmlFor="remember-me" className="ml-2 block text-sm text-gray-900">
-                                Remember me
+                            <label htmlFor="remember_me" className="ml-2 block text-sm text-[#666666]">
+                                Remember this session
                             </label>
                         </div>
-                    </div>
 
-                    {error && (
-                        <div className="text-sm text-[#d93025] flex items-center space-x-1">
-                            <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
-                                <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
-                            </svg>
-                            <span>{error}</span>
-                        </div>
-                    )}
-
-                    <div className="flex flex-col space-y-4">
-                        <Link
-                            href="/forgot-password"
-                            className="text-sm font-medium text-[#1a73e8] hover:text-[#174ea6] w-fit"
-                        >
-                            Forgot password?
-                        </Link>
-
-                        <div className="flex items-center justify-between pt-4">
-                            <Link
-                                href="/register"
-                                className="text-sm font-medium text-[#1a73e8] hover:bg-blue-50 px-2 py-2 -ml-2 rounded transition-colors"
-                            >
-                                Create account
-                            </Link>
-                            <Button
-                                type="submit"
-                                isLoading={isLoading}
-                                className="bg-[#1a73e8] hover:bg-[#1b66c9] text-white px-6 h-10 rounded-[4px] font-medium transition-shadow hover:shadow-md"
-                            >
-                                Sign in
-                            </Button>
+                        <div className="text-sm">
+                            <button type="button" className="font-medium text-[#000000] hover:text-[#666666] transition-colors">
+                                Forgot password?
+                            </button>
                         </div>
                     </div>
+
+                    {/* Submit Button */}
+                    <button
+                        type="submit"
+                        disabled={isSubmitting}
+                        className="w-full flex justify-center py-3 px-4 border border-transparent rounded-full shadow-sm text-sm font-medium text-white bg-[#000000] hover:bg-[#333333] focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-black disabled:opacity-70 disabled:cursor-not-allowed transition-colors duration-200"
+                    >
+                        {isSubmitting ? 'Validating credentials...' : 'Authenticate'}
+                    </button>
                 </form>
             </div>
 
-            <div className="mt-6 w-full max-w-[450px] flex justify-between text-xs text-gray-500 px-2">
-                <div className="flex space-x-4">
-                    <button className="hover:underline">English (United States)</button>
-                </div>
-                <div className="flex space-x-4">
-                    <button className="hover:underline">Help</button>
-                    <button className="hover:underline">Privacy</button>
-                    <button className="hover:underline">Terms</button>
-                </div>
+            {/* Footer Links */}
+            <div className="mt-8 flex space-x-6 text-sm text-[#666666]">
+                <Link href="/support" className="hover:text-black transition-colors">
+                    Trouble signing in?
+                </Link>
+                <Link href="/legal/privacy" className="hover:text-black transition-colors">
+                    Privacy Policy
+                </Link>
             </div>
         </div>
     );
