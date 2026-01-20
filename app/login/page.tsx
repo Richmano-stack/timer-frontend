@@ -16,7 +16,7 @@ const loginSchema = z.object({
             const userRegex = /^[a-z0-9_-]{3,15}$/;
             return emailRegex.test(val) || userRegex.test(val);
         }, { message: 'Invalid email or username format' }),
-    password: z.string().min(6, 'Security protocol requires 12+ characters'),
+    password: z.string().min(6, 'Security protocol requires 6+ characters'),
     remember_me: z.boolean().optional(),
 });
 

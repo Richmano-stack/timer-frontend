@@ -27,8 +27,11 @@ export interface Status {
     duration_ms?: number;
 }
 
-export interface StatusHistoryItem extends Status {
-    // user?: User; // Backend doesn't seem to return user in history endpoint yet, but keeping for future
+export type StatusHistoryItem = Status;
+
+export interface SummaryItem {
+    status_name: string;
+    total_duration: string;
 }
 
 export interface TeamStatus {
