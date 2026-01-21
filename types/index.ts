@@ -32,14 +32,19 @@ export interface StatusHistoryItem extends Status {
 }
 
 export interface TeamStatus {
-    userId: string;
+    user_id: string;
     username: string;
-    currentStatus: StatusType;
-    lastStatusChange: string;
+    current_status: StatusType;
+    last_status_change: string;
 }
 
 export interface ApiError {
     message: string;
     statusCode: number;
+}
+
+export interface SummaryItem {
+    status_name: StatusType;
+    total_duration: string;
 }
 

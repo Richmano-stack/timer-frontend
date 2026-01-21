@@ -42,7 +42,7 @@ export const TeamStatusTable: React.FC<TeamStatusTableProps> = ({ initialTeamSta
 
     const filteredStatus = teamStatus.filter(item => {
         const matchesSearch = item.username.toLowerCase().includes(searchTerm.toLowerCase());
-        const matchesStatus = statusFilter === 'all' || item.currentStatus === statusFilter;
+        const matchesStatus = statusFilter === 'all' || item.current_status === statusFilter;
         return matchesSearch && matchesStatus;
     });
 
@@ -120,21 +120,21 @@ export const TeamStatusTable: React.FC<TeamStatusTableProps> = ({ initialTeamSta
                                 </thead>
                                 <tbody className="bg-white divide-y divide-gray-200">
                                     {filteredStatus.map((item) => (
-                                        <tr key={item.userId} className="hover:bg-gray-50 transition-colors">
+                                        <tr key={item.user_id} className="hover:bg-gray-50 transition-colors">
                                             <td className="px-6 py-4 whitespace-nowrap">
                                                 <div className="text-sm font-medium text-gray-900">{item.username}</div>
                                             </td>
                                             <td className="px-6 py-4 whitespace-nowrap">
                                                 <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full 
-                            ${item.currentStatus === 'available' ? 'bg-green-100 text-green-800' :
-                                                        item.currentStatus === 'on_production' ? 'bg-red-100 text-red-800' :
-                                                            item.currentStatus === 'lunch_break' ? 'bg-yellow-100 text-yellow-800' :
+                            ${item.current_status === 'available' ? 'bg-green-100 text-green-800' :
+                                                        item.current_status === 'on_production' ? 'bg-red-100 text-red-800' :
+                                                            item.current_status === 'lunch_break' ? 'bg-yellow-100 text-yellow-800' :
                                                                 'bg-gray-100 text-gray-800'}`}>
-                                                    {item.currentStatus.replace('_', ' ')}
+                                                    {(item.current_status || 'off_duty').replace('_', ' ')}
                                                 </span>
                                             </td>
                                             <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                                                <ClientDate date={item.lastStatusChange} />
+                                                <ClientDate date={item.last_status_change} />
                                             </td>
                                         </tr>
                                     ))}

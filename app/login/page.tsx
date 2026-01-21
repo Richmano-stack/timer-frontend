@@ -43,7 +43,7 @@ export default function LoginPage() {
     // 3. Idempotent Submission Handler
     const onSubmit = async (data: LoginSchema) => {
         try {
-            const response = await fetch('/api/v1/auth/login', {
+            const response = await fetch('/api/auth/login', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 credentials: 'include',
