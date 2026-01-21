@@ -4,6 +4,7 @@ import React from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { User } from '@/types';
+import { LogoutButton } from './LogoutButton';
 
 interface SidebarProps {
     user: User | null;
@@ -30,33 +31,36 @@ export const Sidebar: React.FC<SidebarProps> = ({ user }) => {
     }
 
     return (
-        <div className="hidden md:flex md:w-64 md:flex-col md:fixed md:inset-y-0">
-            <div className="flex-1 flex flex-col min-h-0 border-r border-gray-200 bg-white">
-                <div className="flex-1 flex flex-col pt-5 pb-4 overflow-y-auto">
-                    <div className="flex items-center flex-shrink-0 px-4">
-                        <h1 className="text-xl font-bold text-gray-900">Timer App</h1>
-                    </div>
-                    <nav className="mt-5 flex-1 px-2 space-y-1">
-                        {navigation.map((item) => {
-                            const isActive = pathname.startsWith(item.href);
-                            return (
-                                <Link
-                                    key={item.name}
-                                    href={item.href}
-                                    className={`
-                    group flex items-center px-2 py-2 text-sm font-medium rounded-md
-                    ${isActive
-                                            ? 'bg-gray-100 text-gray-900'
-                                            : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'}
-                  `}
-                                >
-                                    {item.name}
-                                </Link>
-                            );
-                        })}
-                    </nav>
+        <aside className="hidden md:flex md:w-[280px] md:flex-col md:fixed md:inset-y-0 bg-transparent border-r border-gray-100">
+            <div className="flex flex-col flex-1 min-h-0 px-8 py-12">
+                <div className="flex items-center mb-12">
+                    <h1 className="text-2xl font-black tracking-tighter text-ink-primary">NEXUMA</h1>
+                </div>
+
+                <nav className="flex-1 space-y-4">
+                    {navigation.map((item) => {
+                        const isActive = pathname === item.href;
+                        return (
+                            <Link
+                                key={item.name}
+                                href={item.href}
+                                className={`
+                                    block text-sm transition-all duration-200
+                                    ${isActive
+                                        ? 'text-ink-primary font-bold'
+                                        : 'text-ink-secondary hover:text-ink-primary'}
+                                `}
+                            >
+                                {item.name}
+                            </Link>
+                        );
+                    })}
+                </nav>
+
+                <div className="mt-auto">
+                    <LogoutButton className="!p-0 !bg-transparent !text-red-500 hover:!text-red-600 font-medium text-sm" />
                 </div>
             </div>
-        </div>
+        </aside>
     );
 };

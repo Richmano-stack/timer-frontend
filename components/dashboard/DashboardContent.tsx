@@ -84,31 +84,23 @@ export const DashboardContent: React.FC<DashboardContentProps> = ({ initialStatu
     }, []);
 
     return (
-        <div className="min-h-screen bg-[#F9F9F9] p-6 font-sans text-gray-900">
-            <div className="mx-auto max-w-7xl space-y-8">
-                {/* Header / Meta */}
-                <header className="mb-8">
-                    <h1 className="text-3xl font-bold tracking-tight text-gray-900">Dashboard</h1>
-                    <p className="text-gray-500">Manage your presence and track performance.</p>
-                </header>
+        <div className="space-y-12">
+            {/* Hero Section */}
+            <section>
+                <StatusHero status={status} />
+            </section>
 
-                {/* Hero Section */}
-                <section>
-                    <StatusHero status={status} />
-                </section>
+            {/* Controls Section */}
+            <section>
+                <h2 className="eyebrow mb-6">Quick Actions</h2>
+                <StatusControlGrid currentStatus={status?.status_name || 'off_duty'} />
+            </section>
 
-                {/* Controls Section */}
-                <section>
-                    <h2 className="mb-4 text-xl font-semibold tracking-tight text-gray-900">Quick Actions</h2>
-                    <StatusControlGrid currentStatus={status?.status_name || 'off_duty'} />
-                </section>
-
-                {/* Stats Section */}
-                <section>
-                    <h2 className="mb-4 text-xl font-semibold tracking-tight text-gray-900">Performance Overview</h2>
-                    <QuickStats summary={summary} />
-                </section>
-            </div>
+            {/* Stats Section */}
+            <section>
+                <h2 className="eyebrow mb-6">Performance Overview</h2>
+                <QuickStats summary={summary} />
+            </section>
         </div>
     );
 };
