@@ -74,7 +74,7 @@ export default function LoginPage() {
     };
 
     return (
-        <div className="min-h-screen flex flex-col items-center justify-center bg-[#F9F9F9] text-[#000000] font-sans p-4">
+        <div className="min-h-screen flex flex-col items-center justify-center bg-white text-[#000000] font-sans p-4">
 
             {/* Header Branding */}
             <div className="mb-8">
@@ -94,7 +94,7 @@ export default function LoginPage() {
 
             {/* Login Module */}
             <div
-                className="w-full max-w-[480px] bg-white rounded-[24px] p-8 md:p-16"
+                className="w-full max-w-[480px] bg-[#D9D9D9] rounded-[24px] p-8 md:p-16"
                 style={{ boxShadow: '0px 10px 40px rgba(0,0,0,0.05)' }}
             >
                 <div className="mb-8 text-center">
@@ -166,7 +166,7 @@ export default function LoginPage() {
                                 id="remember_me"
                                 type="checkbox"
                                 {...register('remember_me')}
-                                className="h-4 w-4 text-black border-gray-300 rounded focus:ring-black"
+                                className="h-4 w-4 accent-black border-gray-300 rounded focus:ring-black"
                             />
                             <label htmlFor="remember_me" className="ml-2 block text-sm text-[#666666]">
                                 Remember this session
@@ -184,7 +184,7 @@ export default function LoginPage() {
                     <button
                         type="submit"
                         disabled={isSubmitting}
-                        className="w-full flex justify-center py-3 px-4 border border-transparent rounded-full shadow-sm text-sm font-medium text-white bg-[#000000] hover:bg-[#333333] focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-black disabled:opacity-70 disabled:cursor-not-allowed transition-colors duration-200"
+                        className="w-full flex justify-center py-3 px-4 border border-transparent rounded-xl shadow-sm text-sm font-medium text-white bg-[#000000] hover:bg-[#333333] focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-black disabled:opacity-70 disabled:cursor-not-allowed transition-colors duration-200"
                     >
                         {isSubmitting ? 'Validating credentials...' : 'Authenticate'}
                     </button>
