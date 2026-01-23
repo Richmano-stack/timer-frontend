@@ -10,15 +10,15 @@ interface StatusSwitcherProps {
     currentStatus: StatusType;
 }
 
-const statuses: { label: string; value: StatusType; icon: React.ElementType; color: string; hoverColor: string }[] = [
-    { label: 'Available', value: 'available', icon: UserCheck, color: 'text-green-600', hoverColor: 'hover:bg-green-50' },
-    { label: 'Lunch Break', value: 'lunch_break', icon: Coffee, color: 'text-orange-600', hoverColor: 'hover:bg-orange-50' },
-    { label: 'On Production', value: 'on_production', icon: Monitor, color: 'text-blue-600', hoverColor: 'hover:bg-blue-50' },
-    { label: 'Away', value: 'away', icon: Clock, color: 'text-yellow-600', hoverColor: 'hover:bg-yellow-50' },
-    { label: 'Meeting', value: 'meeting', icon: Phone, color: 'text-purple-600', hoverColor: 'hover:bg-purple-50' },
-    { label: 'Short Break', value: 'short_break', icon: Coffee, color: 'text-teal-600', hoverColor: 'hover:bg-teal-50' },
-    { label: 'Training', value: 'training', icon: GraduationCap, color: 'text-indigo-600', hoverColor: 'hover:bg-indigo-50' },
-    { label: 'Off Duty', value: 'off_duty', icon: Briefcase, color: 'text-gray-600', hoverColor: 'hover:bg-gray-50' },
+const statuses: { label: string; value: StatusType; icon: React.ElementType; color: string }[] = [
+    { label: 'Available', value: 'available', icon: UserCheck, color: 'text-green-600' },
+    { label: 'Lunch Break', value: 'lunch_break', icon: Coffee, color: 'text-orange-600' },
+    { label: 'On Production', value: 'on_production', icon: Monitor, color: 'text-blue-600' },
+    { label: 'Away', value: 'away', icon: Clock, color: 'text-yellow-600' },
+    { label: 'Meeting', value: 'meeting', icon: Phone, color: 'text-purple-600' },
+    { label: 'Short Break', value: 'short_break', icon: Coffee, color: 'text-teal-600' },
+    { label: 'Training', value: 'training', icon: GraduationCap, color: 'text-indigo-600' },
+    { label: 'Off Duty', value: 'off_duty', icon: Briefcase, color: 'text-gray-600' },
 ];
 
 export const StatusSwitcher: React.FC<StatusSwitcherProps> = ({ currentStatus }) => {
@@ -59,7 +59,7 @@ export const StatusSwitcher: React.FC<StatusSwitcherProps> = ({ currentStatus })
                             relative flex flex-col items-center justify-center p-4 rounded-xl border transition-all duration-200
                             ${isActive
                                 ? `bg-white border-${status.color.split('-')[1]}-200 ring-2 ring-${status.color.split('-')[1]}-500 shadow-sm`
-                                : `bg-white border-gray-200 ${status.hoverColor} hover:border-gray-300`
+                                : `bg-white border-gray-200 hover:bg-gray-50 hover:border-gray-300`
                             }
                             ${isLoading !== null ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}
                         `}

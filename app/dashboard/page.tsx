@@ -83,7 +83,7 @@ export default async function DashboardPage({
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
             <div className="mb-8 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                 <div className="flex items-center space-x-3">
-                    <div className="p-2 bg-indigo-600 rounded-lg shadow-sm">
+                    <div className="p-2 bg-gray-900 rounded-lg shadow-lg">
                         <LayoutDashboard className="text-white" size={24} />
                     </div>
                     <div>
@@ -93,39 +93,34 @@ export default async function DashboardPage({
                 </div>
 
                 <div className="flex bg-gray-100 p-1 rounded-lg">
-                    <Link
+                    {/*       <Link
                         href="/dashboard?view=today"
                         className={`px-4 py-1.5 text-sm font-medium rounded-md transition-colors ${view === 'today' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
                     >
                         Today
-                    </Link>
-                    <Link
+                    </Link> */}
+                    {/*  <Link
                         href="/dashboard?view=week"
                         className={`px-4 py-1.5 text-sm font-medium rounded-md transition-colors ${view === 'week' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
                     >
                         Last 7 Days
-                    </Link>
+                    </Link> */}
                 </div>
             </div>
 
             <div className="space-y-8">
-                {/* Top Section: Status & Switcher */}
-                <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-                    {/* Left: Current Status */}
-                    <div className="lg:col-span-1">
-                        <CurrentStatusCard status={currentStatus} />
-                    </div>
-
-                    {/* Right: Status Switcher */}
-                    <div className="lg:col-span-2">
-                        <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6 h-full">
-                            <h3 className="text-lg font-semibold text-gray-900 mb-4">Change Status</h3>
-                            <StatusSwitcher currentStatus={currentStatus?.status_name || 'off_duty'} />
-                        </div>
-                    </div>
+                {/* Hero: Current Status */}
+                <div className="w-full">
+                    <CurrentStatusCard status={currentStatus} />
                 </div>
 
-                {/* Bottom Section: Summary Stats */}
+                {/* Actions: Status Switcher */}
+                <div className="bg-[#D9D9D9] rounded-xl shadow-sm p-6">
+                    <h3 className="text-lg font-semibold text-gray-900 mb-4">Change Status</h3>
+                    <StatusSwitcher currentStatus={currentStatus?.status_name || 'off_duty'} />
+                </div>
+
+                {/* Stats: Summary */}
                 <div>
                     <h3 className="text-lg font-semibold text-gray-900 mb-4 px-1">
                         {view === 'today' ? "Today's Summary" : "Weekly Summary"}

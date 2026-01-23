@@ -26,26 +26,26 @@ export const SummaryCards: React.FC<SummaryCardsProps> = ({ summary }) => {
 
     return (
         <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-4">
-            <Card className="bg-gradient-to-br from-indigo-500 to-purple-600 text-white border-none">
+            <Card className="!bg-[#D9D9D9] text-gray-900 border-none">
                 <div className="p-6">
                     <div className="flex items-center justify-between">
                         <div>
-                            <p className="text-indigo-100 text-sm font-medium">Total Time</p>
+                            <p className="text-gray-600 text-sm font-medium">Total Time</p>
                             <p className="mt-2 text-3xl font-bold">{formatDuration(totalDurationMs.toString())}</p>
                         </div>
-                        <div className="p-3 bg-white bg-opacity-20 rounded-lg">
-                            <Clock size={24} className="text-white" />
+                        <div className="p-3 bg-white rounded-lg">
+                            <Clock size={24} className="text-gray-900" />
                         </div>
                     </div>
                 </div>
             </Card>
 
             {summary.map((item) => (
-                <Card key={item.status_name} className="hover:shadow-md transition-shadow duration-200">
+                <Card key={item.status_name} className="!bg-[#D9D9D9] hover:shadow-md transition-shadow duration-200">
                     <div className="p-6">
                         <div className="flex items-center justify-between">
                             <div>
-                                <p className="text-gray-500 text-sm font-medium capitalize">{item.status_name.replace('_', ' ')}</p>
+                                <p className="text-gray-600 text-sm font-medium capitalize">{item.status_name.replace('_', ' ')}</p>
                                 <p className="mt-2 text-2xl font-semibold text-gray-900">{formatDuration(item.total_duration)}</p>
                             </div>
                             <div className="p-2 bg-gray-50 rounded-full">

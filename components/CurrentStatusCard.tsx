@@ -57,11 +57,11 @@ export const CurrentStatusCard: React.FC<CurrentStatusCardProps> = ({ status }) 
     }, [status, currentStatus]);
 
     return (
-        <Card className="overflow-hidden border-none shadow-md ring-1 ring-gray-100">
-            <div className={`p-6 ${config.bg} transition-colors duration-300`}>
+        <Card className="!bg-[#D9D9D9] overflow-hidden shadow-md ring-1 ring-gray-100">
+            <div className={`p-6 transition-colors duration-300`}>
                 <div className="flex items-start justify-between">
                     <div>
-                        <h2 className="text-sm font-medium text-gray-500 uppercase tracking-wider">Current Status</h2>
+                        <h2 className="text-sm font-medium text-gray-600 uppercase tracking-wider">Current Status</h2>
                         <div className="mt-2 flex items-center space-x-3">
                             <div className={`p-2 rounded-full bg-white shadow-sm ${config.color}`}>
                                 <Icon size={24} />
@@ -72,7 +72,7 @@ export const CurrentStatusCard: React.FC<CurrentStatusCardProps> = ({ status }) 
                         </div>
                     </div>
                     <div className="text-right">
-                        <div className="text-sm font-medium text-gray-500 uppercase tracking-wider">Duration</div>
+                        <div className="text-sm font-medium text-gray-600 uppercase tracking-wider">Duration</div>
                         <div className="mt-1 font-mono text-3xl font-bold text-gray-900 tracking-tight">
                             {duration}
                         </div>
@@ -80,7 +80,7 @@ export const CurrentStatusCard: React.FC<CurrentStatusCardProps> = ({ status }) 
                 </div>
 
                 {status?.start_time && currentStatus !== 'off_duty' && (
-                    <div className="mt-6 flex items-center text-sm text-gray-500">
+                    <div className="mt-6 flex items-center text-sm text-gray-600">
                         <Clock size={14} className="mr-1.5" />
                         Started at <ClientDate date={Number(status.start_time)} options={{ hour: '2-digit', minute: '2-digit' }} />
                     </div>
