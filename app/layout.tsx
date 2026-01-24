@@ -49,10 +49,12 @@ export default async function RootLayout({
   return (
     <html lang="en">
       <body className={inter.className}>
-        <div className="flex h-screen bg-canvas">
+        <div className="flex h-screen bg-white p-4 gap-4 overflow-hidden">
           <Sidebar user={user} />
-          <main className="flex-1 overflow-x-hidden overflow-y-auto p-[48px] ml-[280px]">
-            {children}
+          <main className="flex-1 overflow-y-auto bg-[#D9D9D9] rounded-2xl shadow-sm relative">
+            <div className="absolute inset-0 p-8">
+              {children}
+            </div>
           </main>
         </div>
       </body>
