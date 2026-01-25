@@ -6,6 +6,7 @@ import { useRouter } from 'next/navigation';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
+import { authClient } from '@/lib/auth-client';
 
 // 1. Decoupled Validation Schema
 const loginSchema = z.object({
@@ -41,34 +42,61 @@ export default function LoginPage() {
     });
 
     // 3. Idempotent Submission Handler
-    const onSubmit = async (data: LoginSchema) => {
-        try {
-            const response = await fetch('/api/auth/login', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                credentials: 'include',
-                body: JSON.stringify(data),
-            });
-
-            if (!response.ok) {
-                const errorData = await response.json();
-                // Handle Rate Limiting (429) specifically
-                const message = response.status === 429
-                    ? 'Rate limit exceeded. Try again in 15m.'
-                    : errorData.message || 'Authentication failed.';
-
+    /*     const onSubmit = async (data: LoginSchema) => {
+            try {
+                const response = await fetch('/api/auth/login', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    credentials: 'include',
+                    body: JSON.stringify(data),
+                });
+    
+                if (!response.ok) {
+                    const errorData = await response.json();
+                    // Handle Rate Limiting (429) specifically
+                    const message = response.status === 429
+                        ? 'Rate limit exceeded. Try again in 15m.'
+                        : errorData.message || 'Authentication failed.';
+    
+                    setError('root.serverError', {
+                        type: 'manual',
+                        message
+                    });
+                    return;
+                }
+    
+                router.push('/dashboard');
+            } catch (err) {
                 setError('root.serverError', {
                     type: 'manual',
-                    message
+                    message: 'Network infrastructure failure.'
                 });
+            }
+        }; */
+
+    const onSubmit = async (data: LoginSchema) => {
+        try {
+            const { data: session, error } = await authClient.signIn.email({
+                email: data.identifier,
+                password: data.password,
+                /*  rememberMe: data.remember_me */
+            });
+
+            if (error) {
+                const message = error.status === 429
+                    ? "Infrastructure locked due to too many attempts. Wait 15m."
+                    : error.message || "Invalid credentials.";
+
+                setError('root.serverError', { type: 'manual', message });
                 return;
             }
 
             router.push('/dashboard');
+
         } catch (err) {
             setError('root.serverError', {
                 type: 'manual',
-                message: 'Network infrastructure failure.'
+                message: 'Network infrastructure failure. Check your connection.'
             });
         }
     };
