@@ -6,6 +6,8 @@ import { StatusSwitcher } from '@/components/StatusSwitcher';
 import { SummaryCards } from '@/components/SummaryCards';
 import { LayoutDashboard } from 'lucide-react';
 
+export const dynamic = 'force-dynamic';
+
 interface DashboardProps {
     searchParams: Promise<{ view?: string }>;
 }

@@ -24,20 +24,29 @@ const statuses: { label: string; value: StatusType; icon: React.ElementType; col
 export const StatusSwitcher: React.FC<StatusSwitcherProps> = ({ currentStatus }) => {
     const router = useRouter();
     const [isLoading, setIsLoading] = useState<StatusType | null>(null);
+    const [activeStatus, setActiveStatus] = useState<StatusType | null>(currentStatus);
+
+    React.useEffect(() => {
+        setActiveStatus(currentStatus);
+    }, [currentStatus]);
 
     const handleStatusChange = async (newStatus: StatusType) => {
-        if (newStatus === currentStatus) return;
+        if (newStatus === currentStatus) {
+            alert("You are already in this status. Please select a different status.");
+            return;
+        }
 
         setIsLoading(newStatus);
+
+        const previousStatus = activeStatus;
+        setActiveStatus(newStatus);
         try {
-            if (newStatus === 'off_duty') {
-                await api.post('/api/status/stop', {});
-            } else {
-                await api.post('/api/status/change', { status: newStatus });
-            }
+            const endpoint = newStatus === 'off_duty' ? '/api/status/stop' : '/api/status/change';
+            await api.post(endpoint, { status: newStatus });
             router.refresh();
         } catch (error) {
             console.error('Failed to change status', error);
+            alert("Sync failed. Please try again.");
         } finally {
             setIsLoading(null);
         }
