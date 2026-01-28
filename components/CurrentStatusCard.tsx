@@ -28,6 +28,8 @@ export const CurrentStatusCard: React.FC<CurrentStatusCardProps> = ({ status }) 
     const Icon = config.icon;
 
     const [duration, setDuration] = useState<string>('00:00:00');
+    console.log(status);
+    console.log(currentStatus);
 
     useEffect(() => {
         if (!status?.start_time || currentStatus === 'off_duty') {

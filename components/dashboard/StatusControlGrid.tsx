@@ -8,6 +8,7 @@ import { Coffee, Monitor, Phone, UserCheck, UserX, Zap, GraduationCap, Clock } f
 
 interface StatusControlGridProps {
     currentStatus: StatusType;
+    onStatusChange?: (newStatus: StatusType) => void;
 }
 
 const statuses: {
@@ -78,7 +79,7 @@ const StatusCard = memo(({
 
 StatusCard.displayName = 'StatusCard';
 
-export const StatusControlGrid: React.FC<StatusControlGridProps> = ({ currentStatus }) => {
+export const StatusControlGrid: React.FC<StatusControlGridProps> = ({ currentStatus, onStatusChange }) => {
     const router = useRouter();
     const [loadingStatus, setLoadingStatus] = useState<StatusType | null>(null);
 
@@ -92,13 +93,21 @@ export const StatusControlGrid: React.FC<StatusControlGridProps> = ({ currentSta
             } else {
                 await api.post('/api/status/change', { status: newStatus });
             }
-            router.refresh();
+
+            // Trigger optimistic update if provided
+            if (onStatusChange) {
+                onStatusChange(newStatus);
+            }
+
+            /* router.refresh(); */
         } catch (error) {
             console.error('Failed to change status', error);
         } finally {
             setLoadingStatus(null);
         }
     };
+
+    console.log({ currentStatus });
 
     return (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
