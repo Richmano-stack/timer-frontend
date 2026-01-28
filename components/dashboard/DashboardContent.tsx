@@ -24,16 +24,13 @@ export const DashboardContent: React.FC<DashboardContentProps> = ({ initialStatu
     }, [initialStatus, initialSummary]);
 
     const handleStatusChangeSuccess = (newStatusName: StatusType) => {
-        // 1. Manually update local state immediately (Optimistic Update)
-        setStatus(prev => prev ? { ...prev, status_name: newStatusName } : {
-            id: 'temp',
-            user_id: 'current',
+        // Manually update local state immediately (Optimistic Update)
+        // We always update start_time to Date.now() so the timer resets for the new status
+        setStatus(prev => ({
+            ...(prev || { id: 'temp', user_id: 'current' }),
             status_name: newStatusName,
-            start_time: new Date().toISOString()
-        } as Status);
-
-        // 2. router.refresh() is already handled in StatusControlGrid, 
-        // but we've updated the local state here to "lead" the state.
+            start_time: Date.now().toString()
+        } as Status));
     };
 
     return (
