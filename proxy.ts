@@ -11,13 +11,15 @@ export default async function proxy(request: NextRequest) {
 
     // 1. Static/Internal Exclusions
     if (
-        pathname.startsWith('/_next') ||
-        pathname.startsWith('/static') ||
+        pathname.startsWith('/api/') ||
+        pathname.startsWith('/_next/') ||
+        pathname.startsWith('/static/') ||
         pathname.includes('.') ||
-        pathname.startsWith('/api')
+        pathname === '/favicon.ico'
     ) {
         return NextResponse.next();
     }
+    console.log(`[Proxy] Checking AUTH for path: ${pathname}`);
 
     const isProtectedRoute = protectedRoutes.some(route => pathname.startsWith(route));
     const isAdminRoute = adminRoutes.some(route => pathname.startsWith(route));

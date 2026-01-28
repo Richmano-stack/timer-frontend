@@ -4,7 +4,7 @@ import React, { useEffect, useState } from 'react';
 import { StatusHero } from './StatusHero';
 import { StatusControlGrid } from './StatusControlGrid';
 import { QuickStats } from '@/components/dashboard/QuickStats';
-import { Status, SummaryItem } from '@/types';
+import { Status, SummaryItem, StatusType } from '@/types';
 import { useRouter } from 'next/navigation';
 
 interface DashboardContentProps {
@@ -23,65 +23,18 @@ export const DashboardContent: React.FC<DashboardContentProps> = ({ initialStatu
         setSummary(initialSummary);
     }, [initialStatus, initialSummary]);
 
-    // SSE Connection for real-time updates
-    useEffect(() => {
-        let eventSource: EventSource | null = null;
-        let retryCount = 0;
-        let reconnectionTimeout: NodeJS.Timeout | null = null;
+    const handleStatusChangeSuccess = (newStatusName: StatusType) => {
+        // 1. Manually update local state immediately (Optimistic Update)
+        setStatus(prev => prev ? { ...prev, status_name: newStatusName } : {
+            id: 'temp',
+            user_id: 'current',
+            status_name: newStatusName,
+            start_time: new Date().toISOString()
+        } as Status);
 
-        const connectSSE = () => {
-            console.log(`[SSE] Attempting connection... (Attempt ${retryCount + 1})`);
-            eventSource = new EventSource('/api/sse/status');
-
-            eventSource.onopen = () => {
-                console.log('[SSE] Connection established successfully');
-                retryCount = 0; // Reset retry count on successful connection
-            };
-
-            eventSource.onmessage = (event) => {
-                try {
-                    const data = JSON.parse(event.data);
-                    if (data.type === 'status_update') {
-                        console.log('[SSE] Received status update:', data.status);
-                        setStatus(data.status);
-                    }
-                } catch (error) {
-                    console.error('[SSE] Error parsing message data:', error);
-                }
-            };
-
-            eventSource.onerror = (error) => {
-                const state = eventSource?.readyState;
-                console.error(`[SSE] Connection error. ReadyState: ${state}`, error);
-
-                if (eventSource) {
-                    eventSource.close();
-                    eventSource = null;
-                }
-
-                // Exponential backoff: 1s, 2s, 4s, 8s, 16s, max 30s
-                const delay = Math.min(1000 * Math.pow(2, retryCount), 30000);
-                console.log(`[SSE] Reconnecting in ${delay}ms...`);
-
-                reconnectionTimeout = setTimeout(() => {
-                    retryCount++;
-                    connectSSE();
-                }, delay);
-            };
-        };
-
-        connectSSE();
-
-        return () => {
-            console.log('[SSE] Cleaning up connection');
-            if (eventSource) {
-                eventSource.close();
-            }
-            if (reconnectionTimeout) {
-                clearTimeout(reconnectionTimeout);
-            }
-        };
-    }, []);
+        // 2. router.refresh() is already handled in StatusControlGrid, 
+        // but we've updated the local state here to "lead" the state.
+    };
 
     return (
         <div className="space-y-12">
@@ -93,7 +46,10 @@ export const DashboardContent: React.FC<DashboardContentProps> = ({ initialStatu
             {/* Controls Section */}
             <section>
                 <h2 className="eyebrow mb-6">Quick Actions</h2>
-                <StatusControlGrid currentStatus={status?.status_name || 'off_duty'} />
+                <StatusControlGrid
+                    currentStatus={status?.status_name || 'off_duty'}
+                    onStatusChange={handleStatusChangeSuccess}
+                />
             </section>
 
             {/* Stats Section */}

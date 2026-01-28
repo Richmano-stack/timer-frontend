@@ -43,7 +43,7 @@ export const StatusSwitcher: React.FC<StatusSwitcherProps> = ({ currentStatus })
         try {
             const endpoint = newStatus === 'off_duty' ? '/api/status/stop' : '/api/status/change';
             await api.post(endpoint, { status: newStatus });
-            router.refresh();
+            window.location.reload();
         } catch (error) {
             console.error('Failed to change status', error);
             alert("Sync failed. Please try again.");
