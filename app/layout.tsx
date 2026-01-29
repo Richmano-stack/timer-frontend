@@ -50,7 +50,7 @@ export default async function RootLayout({
     <html lang="en">
       <body className={inter.className}>
         <div className="flex h-screen bg-white p-4 gap-4 overflow-hidden">
-          <Sidebar user={user} />
+          <Sidebar />
           <main className="flex-1 overflow-y-auto bg-[#D9D9D9] rounded-2xl shadow-sm relative">
             <div className="absolute inset-0 p-8">
               {children}
