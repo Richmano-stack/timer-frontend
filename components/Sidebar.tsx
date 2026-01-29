@@ -3,32 +3,47 @@
 import React from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { User } from '@/types';
+import { authClient } from "@/lib/auth-client";
 import { LogoutButton } from './LogoutButton';
 
-interface SidebarProps {
-    user: User | null;
-}
+const SidebarSkeleton = () => (
+    <aside className="hidden md:flex md:w-[280px] md:flex-col bg-[#D9D9D9] rounded-2xl h-full transition-all duration-300 animate-pulse">
+        <div className="flex flex-col flex-1 px-6 py-8">
+            <div className="h-8 w-32 bg-gray-300 rounded mb-10"></div>
+            <nav className="flex-1 space-y-4">
+                {[1, 2, 3, 4, 5].map((i) => (
+                    <div key={i} className="h-10 bg-gray-200 rounded-md"></div>
+                ))}
+            </nav>
+            <div className="mt-auto h-5 w-20 bg-gray-300 rounded"></div>
+        </div>
+    </aside>
+);
 
-export const Sidebar: React.FC<SidebarProps> = ({ user }) => {
+export const Sidebar = () => {
     const pathname = usePathname();
+    // Better-Auth hook handles loading and session state automatically
+    const { data: session, isPending } = authClient.useSession();
 
-    if (!user) return null;
+    if (isPending) return <SidebarSkeleton />;
+    if (!session) return null;
 
-    const navigation = [
-        { name: 'Dashboard', href: '/dashboard' },
-        { name: 'Profile', href: '/profile' },
-        { name: 'Status History', href: '/history' },
-        { name: 'Analytics', href: '/analytics' },
+    const user = session.user as any; // Cast for custom role property in Better-Auth
+
+    // Define navigation with 'roles' metadata
+    const navConfig = [
+        { name: 'Dashboard', href: '/dashboard', roles: ['user', 'supervisor', 'admin'] },
+        { name: 'Profile', href: '/profile', roles: ['user', 'supervisor', 'admin'] },
+        { name: 'Status History', href: '/history', roles: ['user', 'supervisor', 'admin'] },
+        { name: 'Analytics', href: '/analytics', roles: ['user', 'supervisor', 'admin'] },
+        { name: 'Team Status', href: '/team', roles: ['supervisor', 'admin'] },
+        { name: 'User Management', href: '/admin/users', roles: ['admin'] },
     ];
 
-    if (user.role === 'admin' || user.role === 'supervisor') {
-        navigation.push({ name: 'Team Status', href: '/team' });
-    }
-
-    if (user.role === 'admin') {
-        navigation.push({ name: 'User Management', href: '/admin/users' });
-    }
+    // Filter based on the user's role
+    const visibleNavigation = navConfig.filter(item =>
+        item.roles.includes(user.role as string)
+    );
 
     return (
         <aside className="hidden md:flex md:w-[280px] md:flex-col bg-[#D9D9D9] rounded-2xl h-full transition-all duration-300">
@@ -38,11 +53,11 @@ export const Sidebar: React.FC<SidebarProps> = ({ user }) => {
                 </div>
 
                 <nav className="flex-1 space-y-2">
-                    {navigation.map((item) => {
+                    {visibleNavigation.map((item) => {
                         const isActive = pathname === item.href;
                         return (
                             <Link
-                                key={item.name}
+                                key={item.href}
                                 href={item.href}
                                 className={`
                                     block px-4 py-3 rounded-md text-sm transition-all duration-200
@@ -64,3 +79,4 @@ export const Sidebar: React.FC<SidebarProps> = ({ user }) => {
         </aside>
     );
 };
+
