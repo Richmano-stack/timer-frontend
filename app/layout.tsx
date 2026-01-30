@@ -19,32 +19,32 @@ export default async function RootLayout({
 }: Readonly<{
   children: React.ReactNode;
 }>) {
-  let user: User | null = null;
-
-  try {
-    const cookieStore = await cookies();
-    const cookieHeader = cookieStore.toString();
-
-    // Only attempt to fetch user if there are cookies
-    if (cookieHeader) {
-      user = await api.get<User>('/api/auth/me', {
-        headers: { Cookie: cookieHeader }
-      });
-    }
-  } catch (error) {
-    // User not logged in or API error
-    user = null;
-  }
-
-  if (!user) {
-    return (
-      <html lang="en">
-        <body className={inter.className}>
-          {children}
-        </body>
-      </html>
-    );
-  }
+  /*  let user: User | null = null;
+ 
+   try {
+     const cookieStore = await cookies();
+     const cookieHeader = cookieStore.toString();
+ 
+     // Only attempt to fetch user if there are cookies
+     if (cookieHeader) {
+       user = await api.get<User>('/api/auth/me', {
+         headers: { Cookie: cookieHeader }
+       });
+     }
+   } catch (error) {
+     // User not logged in or API error
+     user = null;
+   }
+ 
+   if (!user) {
+     return (
+       <html lang="en">
+         <body className={inter.className}>
+           {children}
+         </body>
+       </html>
+     );
+   } */
 
   return (
     <html lang="en">
