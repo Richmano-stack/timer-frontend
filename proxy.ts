@@ -3,7 +3,7 @@ import type { NextRequest } from 'next/server';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://127.0.0.1:4000';
 
-const protectedRoutes = ['/dashboard', '/profile', '/status'];
+const protectedRoutes = ['/dashboard', '/profile', '/history', '/analytics', '/team'];
 const adminRoutes = ['/admin'];
 
 export default async function proxy(request: NextRequest) {
