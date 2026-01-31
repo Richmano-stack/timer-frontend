@@ -1,6 +1,6 @@
 'use client';
 
-import React from 'react';
+import { UserCustom } from '@/lib/auth-client';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { authClient } from "@/lib/auth-client";
@@ -34,18 +34,19 @@ export const Sidebar = () => {
     }
 
 
-    const user = session.user as any;
+    const user = session.user as unknown as UserCustom;
     // Define navigation with 'roles' metadata
+    console.log("CURRENT_USER_ROLE:", user.role);
     const navConfig = [
-        { name: 'Dashboard', href: '/dashboard', roles: ['user', 'supervisor', 'admin'] },
-        { name: 'Profile', href: '/profile', roles: ['user', 'supervisor', 'admin'] },
-        { name: 'Status History', href: '/history', roles: ['user', 'supervisor', 'admin'] },
-        { name: 'Analytics', href: '/analytics', roles: ['user', 'supervisor', 'admin'] },
+        { name: 'Dashboard', href: '/dashboard', roles: ['agent', 'supervisor', 'admin'] },
+        { name: 'Profile', href: '/profile', roles: ['agent', 'supervisor', 'admin'] },
+        { name: 'Status History', href: '/history', roles: ['agent', 'supervisor', 'admin'] },
+        { name: 'Analytics', href: '/analytics', roles: ['agent', 'supervisor', 'admin'] },
         { name: 'Team Status', href: '/team', roles: ['supervisor', 'admin'] },
         { name: 'User Management', href: '/admin/users', roles: ['admin'] },
     ];
 
-    // Filter based on the user's role
+    // Filter based on the agent's role
     const visibleNavigation = navConfig.filter(item =>
         item.roles.includes(user.role as string)
     );
