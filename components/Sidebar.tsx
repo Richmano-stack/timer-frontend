@@ -25,8 +25,6 @@ export const Sidebar = () => {
     // Better-Auth hook handles loading and session state automatically
     const { data: session, isPending } = authClient.useSession();
 
-    console.log("AUTH_CHECK:", { isPending, session });
-
     if (isPending) return <SidebarSkeleton />;
     if (!session) {
         console.warn("SIDEBAR_HIDDEN: No session found. Check cookies.");
@@ -36,7 +34,6 @@ export const Sidebar = () => {
 
     const user = session.user as unknown as UserCustom;
     // Define navigation with 'roles' metadata
-    console.log("CURRENT_USER_ROLE:", user.role);
     const navConfig = [
         { name: 'Dashboard', href: '/dashboard', roles: ['agent', 'supervisor', 'admin'] },
         { name: 'Profile', href: '/profile', roles: ['agent', 'supervisor', 'admin'] },
