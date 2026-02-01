@@ -5,7 +5,6 @@ import { StatusHero } from './StatusHero';
 import { StatusControlGrid } from './StatusControlGrid';
 import { QuickStats } from '@/components/dashboard/QuickStats';
 import { Status, SummaryItem, StatusType } from '@/types';
-import { useRouter } from 'next/navigation';
 
 interface DashboardContentProps {
     initialStatus: Status | null;
@@ -13,19 +12,15 @@ interface DashboardContentProps {
 }
 
 export const DashboardContent: React.FC<DashboardContentProps> = ({ initialStatus, initialSummary }) => {
-    const router = useRouter();
     const [status, setStatus] = useState<Status | null>(initialStatus);
     const [summary, setSummary] = useState<SummaryItem[]>(initialSummary);
 
-    // Sync state with props when they change (e.g. after router.refresh())
     useEffect(() => {
         setStatus(initialStatus);
         setSummary(initialSummary);
     }, [initialStatus, initialSummary]);
-
     const handleStatusChangeSuccess = (newStatusName: StatusType) => {
-        // Manually update local state immediately (Optimistic Update)
-        // We always update start_time to Date.now() so the timer resets for the new status
+
         setStatus(prev => ({
             ...(prev || { id: 'temp', user_id: 'current' }),
             status_name: newStatusName,
@@ -35,12 +30,9 @@ export const DashboardContent: React.FC<DashboardContentProps> = ({ initialStatu
 
     return (
         <div className="space-y-12">
-            {/* Hero Section */}
             <section>
                 <StatusHero status={status} />
             </section>
-
-            {/* Controls Section */}
             <section>
                 <h2 className="eyebrow mb-6">Quick Actions</h2>
                 <StatusControlGrid
