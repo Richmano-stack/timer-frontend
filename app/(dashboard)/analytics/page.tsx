@@ -15,14 +15,14 @@ export default async function AnalyticsPage({
     const cookieHeader = cookieStore.toString();
     const resolvedSearchParams = await searchParams;
 
-    try {
-        await api.get('/api/auth/me', {
-            headers: { Cookie: cookieHeader }
-        });
-    } catch (error) {
-        redirect('/login');
-    }
-
+    /*     try {
+            await api.get('/api/auth/me', {
+                headers: { Cookie: cookieHeader }
+            });
+        } catch (error) {
+            redirect('/login');
+        }
+     */
     const startDate = resolvedSearchParams.startDate as string || '';
     const endDate = resolvedSearchParams.endDate as string || '';
 
@@ -30,9 +30,6 @@ export default async function AnalyticsPage({
 
     try {
         const queryParams = new URLSearchParams();
-        // For analytics, we might want more data than just 10 items.
-        // Let's fetch a larger set or a specific analytics endpoint if it exists.
-        // Based on previous audit, we use /api/status/history with filters.
         queryParams.set('limit', '1000');
         if (startDate) queryParams.set('startDate', startDate);
         if (endDate) queryParams.set('endDate', endDate);

@@ -7,6 +7,8 @@ export interface User {
     createdAt: string;
     updatedAt: string;
     isActive: boolean;
+    email: string;
+    name: string;
 }
 
 export interface AuthResponse {
@@ -32,7 +34,7 @@ export interface StatusHistoryItem extends Status {
 }
 
 export interface TeamStatus {
-    user_id: string;
+    id: string;
     username: string;
     current_status: StatusType;
     last_status_change: string;
