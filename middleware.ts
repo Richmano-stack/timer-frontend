@@ -15,6 +15,7 @@ export function middleware(req: NextRequest) {
     }
 
     const hasSession = req.cookies.get('better-auth.session_token');
+    console.log(`MIDDLEWARE_AUDIT: Path: ${pathname} | HasCookie: ${!!hasSession}`);
 
     if (!hasSession) {
         const url = req.nextUrl.clone();

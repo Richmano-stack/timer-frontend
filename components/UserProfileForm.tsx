@@ -16,8 +16,8 @@ interface UserProfileFormProps {
 
 export const UserProfileForm: React.FC<UserProfileFormProps> = ({ user }) => {
     const router = useRouter();
-    const [username, setUsername] = useState(user.username);
-    // Email is not in User interface, so we default to empty string or handle it if it exists in runtime
+
+    const [username, setUsername] = useState(user.name || (user as any).username || '');
     const [email, setEmail] = useState((user as any).email || '');
     const [firstName, setFirstName] = useState((user as any).firstName || '');
     const [lastName, setLastName] = useState((user as any).lastName || '');
@@ -34,17 +34,19 @@ export const UserProfileForm: React.FC<UserProfileFormProps> = ({ user }) => {
 
         if (newPassword && newPassword !== confirmPassword) {
             setMessage({ type: 'error', text: 'Passwords do not match' });
+            setIsLoading(false);
             return;
         }
 
         try {
-            await api.put('/api/auth/me', {
-                username,
+            await api.put('/api/user/profile', {
+                name: username,
                 email,
                 firstName,
                 lastName,
                 ...(newPassword ? { password: newPassword } : {})
             });
+
             setMessage({ type: 'success', text: 'Profile updated successfully' });
             setNewPassword('');
             setConfirmPassword('');
@@ -62,14 +64,14 @@ export const UserProfileForm: React.FC<UserProfileFormProps> = ({ user }) => {
                 <div className="flex flex-col sm:flex-row items-start sm:items-center gap-6 mb-8">
                     <div className="relative group">
                         <div className="w-24 h-24 rounded-full bg-indigo-100 flex items-center justify-center text-indigo-600 text-3xl font-bold ring-4 ring-white shadow-sm">
-                            {username.charAt(0).toUpperCase()}
+                            {(username?.[0] || user.email?.[0] || 'U').toUpperCase()}
                         </div>
                         <button className="absolute bottom-0 right-0 p-1.5 bg-white rounded-full shadow-md border border-gray-200 text-gray-500 hover:text-indigo-600 transition-colors">
                             <Camera size={16} />
                         </button>
                     </div>
                     <div>
-                        <h2 className="text-xl font-bold text-gray-900">{user.username}</h2>
+                        <h2 className="text-xl font-bold text-gray-900">{user.name || "User"}</h2>
                         <p className="text-sm text-gray-500 capitalize">{user.role}</p>
                         <div className="flex items-center mt-2 text-xs text-gray-400">
                             <Calendar size={12} className="mr-1" />
@@ -100,7 +102,7 @@ export const UserProfileForm: React.FC<UserProfileFormProps> = ({ user }) => {
                         </div>
 
                         <div>
-                            <label className="block text-sm font-medium text-gray-700 mb-1">Username</label>
+                            <label className="block text-sm font-medium text-gray-700 mb-1">Display Name</label>
                             <div className="relative">
                                 <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
                                     <UserIcon size={18} className="text-gray-400" />
@@ -129,47 +131,18 @@ export const UserProfileForm: React.FC<UserProfileFormProps> = ({ user }) => {
                                 />
                             </div>
                         </div>
+                        <div className="pt-4 border-t border-gray-100 flex items-center justify-between">
+                            <Button type="submit" isLoading={isLoading} className="bg-indigo-600 hover:bg-indigo-700 text-white">
+                                Save Changes
+                            </Button>
+                        </div>
 
-                        <div className="pt-4 border-t border-gray-100">
-                            <h3 className="text-sm font-medium text-gray-900 mb-3">Change Password</h3>
-                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                                <div>
-                                    <label className="block text-sm font-medium text-gray-700 mb-1">New Password</label>
-                                    <Input
-                                        type="password"
-                                        value={newPassword}
-                                        onChange={(e) => setNewPassword(e.target.value)}
-                                        placeholder="New Password"
-                                    />
-                                </div>
-                                <div>
-                                    <label className="block text-sm font-medium text-gray-700 mb-1">Confirm Password</label>
-                                    <Input
-                                        type="password"
-                                        value={confirmPassword}
-                                        onChange={(e) => setConfirmPassword(e.target.value)}
-                                        placeholder="Confirm Password"
-                                    />
-                                </div>
+                        {message && (
+                            <div className={`mt-4 p-4 rounded-md ${message.type === 'success' ? 'bg-green-50 text-green-800' : 'bg-red-50 text-red-800'}`}>
+                                {message.text}
                             </div>
-                        </div>
+                        )}
                     </div>
-
-                    <div className="pt-4 border-t border-gray-100 flex items-center justify-between">
-                        <div className="text-sm text-gray-500">
-                            {/* Placeholder for future "Delete Account" or similar */}
-                        </div>
-                        <Button type="submit" isLoading={isLoading} className="bg-indigo-600 hover:bg-indigo-700 text-white">
-                            Save Changes
-                        </Button>
-                    </div>
-
-                    {message && (
-                        <div className={`p-4 rounded-md flex items-center ${message.type === 'success' ? 'bg-green-50 text-green-800' : 'bg-red-50 text-red-800'}`}>
-                            <div className={`w-2 h-2 rounded-full mr-2 ${message.type === 'success' ? 'bg-green-500' : 'bg-red-500'}`} />
-                            {message.text}
-                        </div>
-                    )}
                 </form>
             </div>
         </Card>

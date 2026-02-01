@@ -120,7 +120,7 @@ export const TeamStatusTable: React.FC<TeamStatusTableProps> = ({ initialTeamSta
                                 </thead>
                                 <tbody className="bg-white divide-y divide-gray-200">
                                     {filteredStatus.map((item) => (
-                                        <tr key={item.user_id} className="hover:bg-gray-50 transition-colors">
+                                        <tr key={item.id} className="hover:bg-gray-50 transition-colors">
                                             <td className="px-6 py-4 whitespace-nowrap">
                                                 <div className="text-sm font-medium text-gray-900">{item.username}</div>
                                             </td>

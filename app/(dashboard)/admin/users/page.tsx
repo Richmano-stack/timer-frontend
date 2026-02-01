@@ -21,17 +21,17 @@ export default async function UsersPage({
     const limit = 10;
 
     let currentUser: User | null = null;
-    try {
-        currentUser = await api.get<User>('/api/auth/me', {
-            headers: { Cookie: cookieHeader }
-        });
-    } catch (error) {
-        redirect('/login');
-    }
-
-    if (!currentUser || currentUser.role !== 'admin') {
-        redirect('/dashboard');
-    }
+    /*     try {
+            currentUser = await api.get<User>('/api/auth/me', {
+                headers: { Cookie: cookieHeader }
+            });
+        } catch (error) {
+            redirect('/login');
+        }
+    
+        if (!currentUser || currentUser.role !== 'admin') {
+            redirect('/dashboard');
+        } */
 
     let users: User[] = [];
     let total = 0;

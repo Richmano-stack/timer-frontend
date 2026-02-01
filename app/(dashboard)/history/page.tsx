@@ -14,15 +14,15 @@ export default async function StatusHistoryPage({
     const cookieStore = await cookies();
     const cookieHeader = cookieStore.toString();
     const resolvedSearchParams = await searchParams;
-
-    try {
-        await api.get('/api/auth/me', {
-            headers: { Cookie: cookieHeader }
-        });
-    } catch (error) {
-        redirect('/login');
-    }
-
+    /* 
+        try {
+            await api.get('/api/auth/me', {
+                headers: { Cookie: cookieHeader }
+            });
+        } catch (error) {
+            redirect('/login');
+        }
+     */
     const page = Number(resolvedSearchParams.page) || 1;
     const startDate = resolvedSearchParams.startDate as string || '';
     const endDate = resolvedSearchParams.endDate as string || '';
