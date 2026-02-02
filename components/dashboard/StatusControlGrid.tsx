@@ -91,7 +91,7 @@ export const StatusControlGrid: React.FC<StatusControlGridProps> = ({ currentSta
             if (newStatus === 'off_duty') {
                 await api.post('/api/status/stop', {});
             } else {
-                await api.post('/api/status/change', { status: newStatus });
+                await api.post('/api/status/update', { status: newStatus });
             }
 
             // Trigger optimistic update if provided
