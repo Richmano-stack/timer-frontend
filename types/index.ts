@@ -21,12 +21,12 @@ export type StatusType = 'available' | 'lunch_break' | 'on_production' | 'away' 
 
 // Updated to match backend response (snake_case)
 export interface Status {
-    id: string;
-    user_id: string;
-    status_name: StatusType;
-    start_time: string; // Backend returns string (bigint) or number
-    end_time?: string | null;
-    duration_ms?: number;
+    id: number; // Postman showed 323
+    userId: string;
+    statusName: StatusType; // Changed from status_name
+    startTime: number;
+    endTime?: number | null;
+    durationMs: number;
 }
 
 export interface StatusHistoryItem extends Status {
