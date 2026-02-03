@@ -49,7 +49,7 @@ export const Sidebar = () => {
     );
 
     return (
-        <aside className="hidden md:flex md:w-[280px] md:flex-col bg-[#D9D9D9] rounded-2xl h-full transition-all duration-300">
+        <aside className="hidden md:flex md:w-[280px] md:flex-col bg-gray-100 shadow-md rounded-2xl h-full transition-all duration-300">
             <div className="flex flex-col flex-1 min-h-0 px-6 py-8">
                 <div className="flex items-center mb-10 pl-2">
                     <h1 className="text-2xl font-black tracking-tighter text-ink-primary">NEXUMA</h1>
@@ -65,7 +65,7 @@ export const Sidebar = () => {
                                 className={`
                                     block px-4 py-3 rounded-md text-sm transition-all duration-200
                                     ${isActive
-                                        ? 'bg-white text-ink-primary font-bold shadow-sm border border-gray-100'
+                                        ? 'bg-white text-ink-primary font-bold shadow-sm'
                                         : 'text-ink-secondary hover:text-ink-primary hover:bg-gray-50'}
                                 `}
                             >
@@ -76,7 +76,7 @@ export const Sidebar = () => {
                 </nav>
 
                 <div className="mt-auto pl-2">
-                    <LogoutButton className="!p-0 !bg-transparent !text-red-500 hover:!text-red-600 font-medium text-sm" />
+                    <LogoutButton className="w-full justify-start !px-4 !py-3 rounded-md text-sm transition-all duration-200 !text-ink-secondary hover:!text-ink-primary hover:!bg-gray-50 !bg-transparent shadow-none" />
                 </div>
             </div>
         </aside>

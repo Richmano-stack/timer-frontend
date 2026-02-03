@@ -98,8 +98,7 @@ export const StatusHero: React.FC<StatusHeroProps> = ({ status }) => {
     }, [status, currentStatus]);
 
     return (
-        <div className="bg-surface rounded-hero p-16 shadow-interaction flex flex-col items-center justify-center text-center">
-            {/* Pulse-Pill Status Indicator */}
+        <div className="bg-surface rounded-hero p-16 shadow-2xl flex flex-col items-center justify-center text-center">
             <div className={`inline-flex items-center gap-2 px-4 py-1.5 rounded-full border ${config.pillStyle} mb-8`}>
                 <div className={`w-2 h-2 rounded-full ${currentStatus === 'off_duty' ? 'bg-slate-400' : 'bg-green-500 animate-pulse'}`} />
                 <span className={`text-xs ${config.labelStyle} uppercase tracking-widest`}>
@@ -107,7 +106,6 @@ export const StatusHero: React.FC<StatusHeroProps> = ({ status }) => {
                 </span>
             </div>
 
-            {/* Timer Display */}
             <div className="text-[5rem] font-black text-ink-primary tabular-nums tracking-tighter leading-none mb-4">
                 {duration}
             </div>

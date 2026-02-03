@@ -15,7 +15,7 @@ export const StatusCard = memo(({ config, isActive, isLoading, onClick }: Status
             onClick={onClick}
             disabled={isLoading}
             className={`group relative flex flex-col p-8 rounded-xl transition-all duration-300 text-left min-h-[160px] 
-                ${isActive ? 'bg-blue-600 text-white shadow-lg scale-[1.02]' : 'bg-white text-gray-900 border hover:border-blue-400'}
+                ${isActive ? 'bg-black text-white shadow-xl scale-[1.03]' : 'bg-white text-gray-900 shadow-lg hover:shadow-xl hover:scale-[1.03]'}
                 ${isLoading ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}
         >
             <div className="flex items-start justify-between mb-auto">
