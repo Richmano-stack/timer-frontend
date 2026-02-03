@@ -1,0 +1,56 @@
+'use client';
+
+import React, { useEffect, useState } from 'react';
+import { StatusControlGrid } from '@/components/status/StatusControlGrid';
+import { StatusHero } from '@/components/dashboard/StatusHero';
+import { api } from '@/lib/api';
+import { StatusType, Status } from '@/types';
+
+export default function DashboardContent() {
+    const [status, setStatus] = useState<Status | null>(null);
+    const [isInitialLoading, setIsInitialLoading] = useState(true);
+
+    // Initial Sync with Server (The Source of Truth)
+    useEffect(() => {
+        const fetchCurrentStatus = async () => {
+            try {
+                const response = await api.get<Status>('/api/status/current');
+                setStatus(response);
+            } catch (err) {
+                console.error("Failed to sync status on mount", err);
+                // Fallback or Error Boundary trigger
+            } finally {
+                setIsInitialLoading(false);
+            }
+        };
+        fetchCurrentStatus();
+    }, []);
+
+    if (isInitialLoading) {
+        return <div className="p-8 text-center animate-pulse">Syncing with server...</div>;
+    }
+
+    return (
+        <div className="space-y-12">
+            <header>
+                <h1 className="text-2xl font-bold mb-2">Status Dashboard</h1>
+                <p className="text-gray-500">Source of Truth: Server</p>
+            </header>
+
+            {/* Hero Section */}
+            <section>
+                <StatusHero status={status} />
+            </section>
+
+            {status && (
+                <StatusControlGrid
+                    currentStatus={status.statusName}
+                    onStatusChange={(newStatus) => {
+                        // Optimistic update
+                        setStatus(prev => prev ? { ...prev, statusName: newStatus, startTime: Date.now() } : null);
+                    }}
+                />
+            )}
+        </div>
+    );
+}
