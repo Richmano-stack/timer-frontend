@@ -55,10 +55,10 @@ const statusConfig: Record<StatusType, {
 };
 
 export const StatusHero: React.FC<StatusHeroProps> = ({ status }) => {
-    const currentStatus = status?.status_name || 'off_duty';
+    const currentStatus = status?.statusName || 'off_duty';
     const config = statusConfig[currentStatus];
     const [duration, setDuration] = useState<string>('00:00:00');
-    const requestRef = useRef<number>(undefined);
+    const requestRef = useRef<number | undefined>(undefined);
 
     const formatTime = (ms: number) => {
         const seconds = Math.floor(ms / 1000);
@@ -69,17 +69,12 @@ export const StatusHero: React.FC<StatusHeroProps> = ({ status }) => {
     };
 
     useEffect(() => {
-        if (!status?.start_time || currentStatus === 'off_duty') {
+        if (!status?.startTime || currentStatus === 'off_duty') {
             setDuration('00:00:00');
             return;
         }
 
-        // Robust parsing of start_time (handles both numeric strings and ISO strings)
-        const rawStartTime = status.start_time;
-        const parsedTime = Number(rawStartTime);
-        const startTime = !isNaN(parsedTime) && rawStartTime !== ''
-            ? parsedTime
-            : new Date(rawStartTime).getTime();
+        const startTime = status.startTime;
 
         if (isNaN(startTime)) {
             setDuration('00:00:00');
