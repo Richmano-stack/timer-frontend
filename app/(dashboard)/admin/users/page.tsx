@@ -3,7 +3,6 @@ import { api } from '@/lib/api';
 import { User } from '@/types';
 import { UsersTable } from '@/components/UsersTable';
 
-import { redirect } from 'next/navigation';
 
 export default async function UsersPage({
     searchParams,
@@ -19,19 +18,6 @@ export default async function UsersPage({
     const role = resolvedSearchParams.role as string || '';
     const status = resolvedSearchParams.status as string || '';
     const limit = 10;
-
-    let currentUser: User | null = null;
-    /*     try {
-            currentUser = await api.get<User>('/api/auth/me', {
-                headers: { Cookie: cookieHeader }
-            });
-        } catch (error) {
-            redirect('/login');
-        }
-    
-        if (!currentUser || currentUser.role !== 'admin') {
-            redirect('/dashboard');
-        } */
 
     let users: User[] = [];
     let total = 0;

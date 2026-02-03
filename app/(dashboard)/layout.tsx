@@ -6,7 +6,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
             {/* 1. Sidebar handles its own internal session logic */}
             <Sidebar />
 
-            <main className="flex-1 overflow-y-auto bg-[#D9D9D9] rounded-2xl shadow-sm relative">
+            <main className="flex-1 overflow-y-auto bg-gray-100 rounded-2xl shadow-md relative">
                 <div className="absolute inset-0 p-8">
                     {children}
                 </div>

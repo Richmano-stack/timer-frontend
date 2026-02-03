@@ -4,7 +4,7 @@ import React, { useEffect, useState } from 'react';
 import { StatusControlGrid } from '@/components/status/StatusControlGrid';
 import { StatusHero } from '@/components/dashboard/StatusHero';
 import { api } from '@/lib/api';
-import { StatusType, Status } from '@/types';
+import { Status } from '@/types';
 
 export default function DashboardContent() {
     const [status, setStatus] = useState<Status | null>(null);
@@ -34,7 +34,7 @@ export default function DashboardContent() {
         <div className="space-y-12">
             <header>
                 <h1 className="text-2xl font-bold mb-2">Status Dashboard</h1>
-                <p className="text-gray-500">Source of Truth: Server</p>
+                <p className="text-gray-500">Status manager</p>
             </header>
 
             {/* Hero Section */}
