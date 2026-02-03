@@ -10,11 +10,10 @@ export const LogoutButton: React.FC<{ className?: string }> = ({ className }) =>
 
     const handleLogout = async () => {
         try {
-            await api.post('/api/auth/logout', {});
+            await api.post('/api/auth/sign-out', {});
         } catch (error) {
             console.error('Logout failed', error);
         } finally {
-            // Always redirect to login, even if API fails (maybe session expired)
             router.push('/login');
             router.refresh();
         }
