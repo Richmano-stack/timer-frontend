@@ -12,6 +12,7 @@ export const StatusCard = memo(({ config, isActive, isLoading, onClick }: Status
     const Icon = config.icon;
     return (
         <button
+            type="button"
             onClick={onClick}
             disabled={isLoading}
             className={`group relative flex flex-col p-8 rounded-xl transition-all duration-300 text-left min-h-[160px] 
