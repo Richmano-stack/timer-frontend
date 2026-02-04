@@ -41,39 +41,6 @@ export default function LoginPage() {
         }
     });
 
-    // 3. Idempotent Submission Handler
-    /*     const onSubmit = async (data: LoginSchema) => {
-            try {
-                const response = await fetch('/api/auth/login', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    credentials: 'include',
-                    body: JSON.stringify(data),
-                });
-    
-                if (!response.ok) {
-                    const errorData = await response.json();
-                    // Handle Rate Limiting (429) specifically
-                    const message = response.status === 429
-                        ? 'Rate limit exceeded. Try again in 15m.'
-                        : errorData.message || 'Authentication failed.';
-    
-                    setError('root.serverError', {
-                        type: 'manual',
-                        message
-                    });
-                    return;
-                }
-    
-                router.push('/dashboard');
-            } catch (err) {
-                setError('root.serverError', {
-                    type: 'manual',
-                    message: 'Network infrastructure failure.'
-                });
-            }
-        }; */
-
     const onSubmit = async (data: LoginSchema) => {
         try {
             const { data: session, error } = await authClient.signIn.email({
@@ -102,7 +69,7 @@ export default function LoginPage() {
     };
 
     return (
-        <div className="min-h-screen flex flex-col items-center justify-center bg-white text-[#000000] font-sans p-4">
+        <div className="min-h-screen flex flex-col items-center justify-center bg-gray-100 text-[#000000] font-sans p-4">
 
             {/* Header Branding */}
             <div className="mb-8">
@@ -122,7 +89,7 @@ export default function LoginPage() {
 
             {/* Login Module */}
             <div
-                className="w-full max-w-[480px] bg-[#D9D9D9] rounded-[24px] p-8 md:p-16"
+                className="w-full max-w-[480px] bg-white shadow-3xl rounded-[24px] p-8 md:p-16"
                 style={{ boxShadow: '0px 10px 40px rgba(0,0,0,0.05)' }}
             >
                 <div className="mb-8 text-center">

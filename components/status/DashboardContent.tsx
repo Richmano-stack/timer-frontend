@@ -16,8 +16,13 @@ export default function DashboardContent() {
             try {
                 const response = await api.get<Status>('/api/status/current');
                 setStatus(response);
-            } catch (err) {
-                console.error("Failed to sync status on mount", err);
+            } catch (err: any) {
+                if (err?.statusCode === 404) {
+                    // 404 is expected when user is off duty / no current status
+                    setStatus(null);
+                } else {
+                    console.error("Failed to sync status on mount", err);
+                }
                 // Fallback or Error Boundary trigger
             } finally {
                 setIsInitialLoading(false);
@@ -42,15 +47,24 @@ export default function DashboardContent() {
                 <StatusHero status={status} />
             </section>
 
-            {status && (
-                <StatusControlGrid
-                    currentStatus={status.statusName}
-                    onStatusChange={(newStatus) => {
-                        // Optimistic update
-                        setStatus(prev => prev ? { ...prev, statusName: newStatus, startTime: Date.now() } : null);
-                    }}
-                />
-            )}
+            <StatusControlGrid
+                currentStatus={status?.statusName || 'off_duty'}
+                onStatusChange={(newStatus) => {
+                    // Optimistic update
+                    setStatus(prev => {
+                        if (prev) {
+                            return { ...prev, statusName: newStatus, startTime: Date.now() };
+                        }
+                        return {
+                            id: 0, // Placeholder
+                            userId: 'current',
+                            statusName: newStatus,
+                            startTime: Date.now(),
+                            durationMs: 0
+                        };
+                    });
+                }}
+            />
         </div>
     );
 }
