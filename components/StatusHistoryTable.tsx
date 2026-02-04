@@ -8,7 +8,6 @@ import { Clock, Coffee, Monitor, Phone, UserCheck, UserX, Calendar } from 'lucid
 
 import { useRouter, usePathname, useSearchParams } from 'next/navigation';
 import { Button } from '@/components/ui/Button';
-import { Input } from '@/components/ui/Input';
 import { ChevronLeft, ChevronRight, Download } from 'lucide-react';
 
 interface StatusHistoryTableProps {
@@ -141,7 +140,7 @@ export const StatusHistoryTable: React.FC<StatusHistoryTableProps> = ({
                         </thead>
                         <tbody className="bg-white divide-y divide-gray-200">
                             {history.map((item) => {
-                                const config = statusConfig[item.status_name] || statusConfig.off_duty;
+                                const config = statusConfig[item.statusName] || statusConfig.off_duty;
                                 const Icon = config.icon;
 
                                 return (
@@ -159,14 +158,14 @@ export const StatusHistoryTable: React.FC<StatusHistoryTableProps> = ({
                                         <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">
                                             <div className="flex items-center">
                                                 <Calendar size={14} className="mr-1.5 text-gray-400" />
-                                                <ClientDate date={Number(item.start_time)} />
+                                                <ClientDate date={Number(item.startTime)} />
                                             </div>
                                         </td>
                                         <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">
-                                            {item.end_time ? (
+                                            {item.endTime ? (
                                                 <div className="flex items-center">
                                                     <Calendar size={14} className="mr-1.5 text-gray-400" />
-                                                    <ClientDate date={Number(item.end_time)} />
+                                                    <ClientDate date={Number(item.endTime)} />
                                                 </div>
                                             ) : (
                                                 <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
@@ -175,11 +174,11 @@ export const StatusHistoryTable: React.FC<StatusHistoryTableProps> = ({
                                             )}
                                         </td>
                                         <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600 font-mono">
-                                            {item.duration_ms ? (
+                                            {item.durationMs ? (
                                                 <div className="flex items-center">
                                                     <Clock size={14} className="mr-1.5 text-gray-400" />
                                                     {(() => {
-                                                        const seconds = Math.floor(item.duration_ms / 1000);
+                                                        const seconds = Math.floor(item.durationMs / 1000);
                                                         return `${Math.floor(seconds / 3600)}h ${Math.floor((seconds % 3600) / 60)}m ${seconds % 60}s`;
                                                     })()}
                                                 </div>
