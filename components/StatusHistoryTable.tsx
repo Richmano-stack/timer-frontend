@@ -16,6 +16,14 @@ interface StatusHistoryTableProps {
     totalPages: number;
     initialStartDate?: string;
     initialEndDate?: string;
+    pagination?: {
+        currentPage: number;
+        totalPages: number;
+        totalItems: number;
+        hasNextPage: boolean;
+        hasPrevPage: boolean;
+    } | null;
+    error?: string | null;
 }
 
 const statusConfig: Record<StatusType, { color: string; icon: React.ElementType; label: string; bg: string }> = {
@@ -34,7 +42,9 @@ export const StatusHistoryTable: React.FC<StatusHistoryTableProps> = ({
     currentPage,
     totalPages,
     initialStartDate = '',
-    initialEndDate = ''
+    initialEndDate = '',
+    pagination,
+    error
 }) => {
     const router = useRouter();
     const pathname = usePathname();
@@ -81,6 +91,14 @@ export const StatusHistoryTable: React.FC<StatusHistoryTableProps> = ({
 
         handleFilterChange(startStr, endStr);
     };
+
+    if (error) {
+        return (
+            <div className="bg-red-50 border border-red-200 text-red-700 p-4 rounded-lg flex items-center justify-center">
+                <p>{error}</p>
+            </div>
+        );
+    }
 
     return (
         <div className="space-y-4">
@@ -230,6 +248,7 @@ export const StatusHistoryTable: React.FC<StatusHistoryTableProps> = ({
                     <div>
                         <p className="text-sm text-gray-700">
                             Showing page <span className="font-medium">{currentPage}</span> of <span className="font-medium">{totalPages}</span>
+                            {pagination && <span className="ml-1">({pagination.totalItems} total entries)</span>}
                         </p>
                     </div>
                     <div>

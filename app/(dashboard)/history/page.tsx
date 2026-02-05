@@ -18,34 +18,54 @@ export default async function StatusHistoryPage({
     const limit = 10;
 
     let history: StatusHistoryItem[] = [];
-    let total = 0;
+    let pagination: { currentPage: number; totalPages: number; totalItems: number; hasNextPage: boolean; hasPrevPage: boolean } | null = null;
+    let error: string | null = null;
 
     try {
-        const limit = 10;
-        const page = Number(resolvedSearchParams.page) || 1;
         const queryParams = new URLSearchParams();
         queryParams.set('page', page.toString());
         queryParams.set('limit', limit.toString());
         if (startDate) queryParams.set('startDate', startDate);
         if (endDate) queryParams.set('endDate', endDate);
 
-        const response = await api.get<{ data: StatusHistoryItem[], meta: { total: number } }>(`/api/status/history?${queryParams.toString()}`, {
+        const response = await api.get<{
+            data: StatusHistoryItem[],
+            pagination?: {
+                currentPage: number;
+                totalPages: number;
+                totalItems: number;
+                hasNextPage: boolean;
+                hasPrevPage: boolean;
+            }
+        }>(`/api/status/history?${queryParams.toString()}`, {
             headers: { Cookie: cookieHeader }
         });
 
-        // Handle both array response (legacy) and paginated response
         if (Array.isArray(response)) {
             history = response;
-            total = response.length;
-        } else {
+            pagination = {
+                currentPage: 1,
+                totalPages: 1,
+                totalItems: response.length,
+                hasNextPage: false,
+                hasPrevPage: false
+            };
+        } else if (response && response.data) {
             history = response.data;
-            total = response.meta.total;
+            pagination = response.pagination || {
+                currentPage: 1,
+                totalPages: 1,
+                totalItems: response.data.length,
+                hasNextPage: false,
+                hasPrevPage: false
+            };
         }
-    } catch (error) {
-        console.error('Failed to fetch history', error);
+    } catch (err) {
+        console.error('Failed to fetch history', err);
+        error = 'Failed to load history. Please try again later.';
     }
 
-    const totalPages = Math.ceil(total / limit);
+    const totalPages = pagination?.totalPages || 1;
 
     return (
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
@@ -62,9 +82,11 @@ export default async function StatusHistoryPage({
             <StatusHistoryTable
                 history={history}
                 currentPage={page}
-                totalPages={totalPages || 1}
+                totalPages={totalPages}
                 initialStartDate={startDate}
                 initialEndDate={endDate}
+                pagination={pagination}
+                error={error}
             />
         </div>
     );
