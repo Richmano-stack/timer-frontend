@@ -41,8 +41,8 @@ export const StatusHistoryTable: React.FC<StatusHistoryTableProps> = ({
     history,
     currentPage,
     totalPages,
-    initialStartDate = '',
-    initialEndDate = '',
+    /*     initialStartDate = '',
+        initialEndDate = '', */
     pagination,
     error
 }) => {
@@ -50,9 +50,9 @@ export const StatusHistoryTable: React.FC<StatusHistoryTableProps> = ({
     const pathname = usePathname();
     const searchParams = useSearchParams();
 
-    const [startDate, setStartDate] = React.useState(initialStartDate);
-    const [endDate, setEndDate] = React.useState(initialEndDate);
-
+    /*     const [startDate, setStartDate] = React.useState(initialStartDate);
+        const [endDate, setEndDate] = React.useState(initialEndDate);
+     */
     const updateUrl = (newParams: Record<string, string>) => {
         const params = new URLSearchParams(searchParams.toString());
         Object.entries(newParams).forEach(([key, value]) => {
@@ -65,33 +65,33 @@ export const StatusHistoryTable: React.FC<StatusHistoryTableProps> = ({
         router.push(`${pathname}?${params.toString()}`);
     };
 
-    const handleFilterChange = (start: string, end: string) => {
-        setStartDate(start);
-        setEndDate(end);
-        updateUrl({ startDate: start, endDate: end, page: '1' });
-    };
+    /*     const handleFilterChange = (start: string, end: string) => {
+            setStartDate(start);
+            setEndDate(end);
+            updateUrl({ startDate: start, endDate: end, page: '1' });
+        }; */
 
     const onPageChange = (page: number) => {
         updateUrl({ page: page.toString() });
     };
 
-    const onExport = () => {
-        // Mock export functionality for now
-        console.log('Exporting data...');
-        alert('Export functionality coming soon!');
-    };
-
-    const handleQuickFilter = (days: number) => {
-        const end = new Date();
-        const start = new Date();
-        start.setDate(end.getDate() - days);
-
-        const endStr = end.toISOString().split('T')[0];
-        const startStr = start.toISOString().split('T')[0];
-
-        handleFilterChange(startStr, endStr);
-    };
-
+    /*     const onExport = () => {
+            // Mock export functionality for now
+            console.log('Exporting data...');
+            alert('Export functionality coming soon!');
+        };
+    
+        const handleQuickFilter = (days: number) => {
+            const end = new Date();
+            const start = new Date();
+            start.setDate(end.getDate() - days);
+    
+            const endStr = end.toISOString().split('T')[0];
+            const startStr = start.toISOString().split('T')[0];
+    
+            handleFilterChange(startStr, endStr);
+        };
+     */
     if (error) {
         return (
             <div className="bg-red-50 border border-red-200 text-red-700 p-4 rounded-lg flex items-center justify-center">
@@ -102,7 +102,7 @@ export const StatusHistoryTable: React.FC<StatusHistoryTableProps> = ({
 
     return (
         <div className="space-y-4">
-            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-end gap-4 bg-white p-4 rounded-lg shadow-sm border border-gray-200">
+            {/*             <div className="flex flex-col sm:flex-row justify-between items-start sm:items-end gap-4 bg-white p-4 rounded-lg shadow-sm border border-gray-200">
                 <div className="flex flex-wrap gap-2">
                     <Button variant="outline" size="sm" onClick={() => handleQuickFilter(0)}>Today</Button>
                     <Button variant="outline" size="sm" onClick={() => handleQuickFilter(7)}>Last 7 Days</Button>
@@ -135,23 +135,23 @@ export const StatusHistoryTable: React.FC<StatusHistoryTableProps> = ({
                         Export
                     </Button>
                 </div>
-            </div>
+            </div> */}
 
             <Card className="overflow-hidden border-none shadow-md ring-1 ring-gray-100">
                 <div className="overflow-x-auto">
                     <table className="min-w-full divide-y divide-gray-200">
                         <thead className="bg-gray-50">
                             <tr>
-                                <th scope="col" className="px-6 py-4 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">
+                                <th scope="col" className="px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">
                                     Status
                                 </th>
-                                <th scope="col" className="px-6 py-4 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">
+                                <th scope="col" className="px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">
                                     Started At
                                 </th>
-                                <th scope="col" className="px-6 py-4 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">
+                                <th scope="col" className="px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">
                                     Ended At
                                 </th>
-                                <th scope="col" className="px-6 py-4 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">
+                                <th scope="col" className="px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">
                                     Duration
                                 </th>
                             </tr>
@@ -163,7 +163,7 @@ export const StatusHistoryTable: React.FC<StatusHistoryTableProps> = ({
 
                                 return (
                                     <tr key={item.id} className="hover:bg-gray-50 transition-colors">
-                                        <td className="px-6 py-4 whitespace-nowrap">
+                                        <td className="px-6 py-3 whitespace-nowrap">
                                             <div className="flex items-center">
                                                 <div className={`p-1.5 rounded-full mr-3 ${config.bg} ${config.color}`}>
                                                     <Icon size={16} />
@@ -173,13 +173,13 @@ export const StatusHistoryTable: React.FC<StatusHistoryTableProps> = ({
                                                 </span>
                                             </div>
                                         </td>
-                                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">
+                                        <td className="px-6 py-3 whitespace-nowrap text-sm text-gray-600">
                                             <div className="flex items-center">
                                                 <Calendar size={14} className="mr-1.5 text-gray-400" />
                                                 <ClientDate date={Number(item.startTime)} />
                                             </div>
                                         </td>
-                                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">
+                                        <td className="px-6 py-3 whitespace-nowrap text-sm text-gray-600">
                                             {item.endTime ? (
                                                 <div className="flex items-center">
                                                     <Calendar size={14} className="mr-1.5 text-gray-400" />
@@ -191,7 +191,7 @@ export const StatusHistoryTable: React.FC<StatusHistoryTableProps> = ({
                                                 </span>
                                             )}
                                         </td>
-                                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600 font-mono">
+                                        <td className="px-6 py-3 whitespace-nowrap text-sm text-gray-600 font-mono">
                                             {item.durationMs ? (
                                                 <div className="flex items-center">
                                                     <Clock size={14} className="mr-1.5 text-gray-400" />

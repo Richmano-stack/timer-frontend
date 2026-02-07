@@ -5,8 +5,8 @@
   --surface: #FFFFFF;
   --ink-primary: #000000;
   --ink-secondary: #666666;
-  --interaction-shadow: 0px 10px 40px rgba(0,0,0,0.05);
-  --active-shadow: 0px 20px 50px rgba(0,0,0,0.15);
+  --interaction-shadow: 0px 10px 40px rgba(0, 0, 0, 0.05);
+  --active-shadow: 0px 20px 50px rgba(0, 0, 0, 0.15);
   --radius-hero: 32px;
   --radius-card: 24px;
 }
@@ -31,7 +31,12 @@
     -webkit-font-smoothing: antialiased;
   }
 
-  h1, h2, h3, h4, h5, h6 {
+  h1,
+  h2,
+  h3,
+  h4,
+  h5,
+  h6 {
     font-weight: 800;
     letter-spacing: -0.04em;
   }
