@@ -70,7 +70,7 @@ export default async function StatusHistoryPage({
     return (
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
             <div className="mb-8 flex items-center space-x-3">
-                <div className="p-2 bg-indigo-600 rounded-lg shadow-sm">
+                <div className="p-2 bg-black rounded-lg shadow-sm">
                     <History className="text-white" size={24} />
                 </div>
                 <div>

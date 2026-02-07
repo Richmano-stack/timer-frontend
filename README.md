@@ -1,36 +1,97 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# ⏱️ Timer Management System
 
-## Getting Started
+A high-performance, real-time status tracking and management dashboard built for modern teams. This application features a robust **Express.js backend** providing a seamless experience for monitoring employee statuses, analyzing performance metrics, and managing team availability.
 
-First, run the development server:
+---
+
+## Features
+
+### Team Management
+- **Live Team Status**: Monitor the real-time status of all team members from a centralized table.
+- **User Administration**: Dedicated admin interface for creating, editing, and managing user accounts and roles.
+- **Profile Management**: Personalized user profiles with customizable settings.
+
+### Analytics & Insights
+- **Performance Analytics**: Visual data representation using Recharts to track status durations and patterns.
+- **Status History**: Detailed audit logs of all status changes for accountability and reporting.
+- **Summary Cards**: Quick-glance metrics of daily activity and team health.
+
+### Developer Experience
+- **Next.js 15+ & React 19**: Leveraging the latest features of the React ecosystem.
+- **Better-Auth Integration**: Robust authentication flow with secure session management.
+- **Tailwind CSS 4**: Cutting-edge styling with the latest version of Tailwind.
+- **Modular Architecture**: Clean separation of concerns using Next.js Route Groups.
+
+---
+
+## Tech Stack
+
+- **Frontend Framework**: [Next.js (App Router)](https://nextjs.org/)
+- **Backend API**: [Express.js](https://expressjs.com/)
+- **Runtime**: [React 19](https://react.dev/)
+- **Styling**: [Tailwind CSS 4](https://tailwindcss.com/)
+- **Authentication**: [Better-Auth](https://better-auth.com/)
+- **Data Visualization**: [Recharts](https://recharts.org/)
+- **Icons**: [Lucide React](https://lucide.dev/)
+- **Forms & Validation**: [React Hook Form](https://react-hook-form.com/) & [Zod](https://zod.dev/)
+- **Testing**: [Vitest](https://vitest.dev/)
+
+---
+
+## Architecture
+
+The project utilizes a **Route Grouping** strategy to maintain a clean and scalable structure:
+
+- **`app/(auth)`**: Contains login and registration flows. Uses a minimalist layout without navigation elements.
+- **`app/(dashboard)`**: Contains the core application logic. Shares a common "App Shell" layout featuring the persistent Sidebar and Topbar.
+- **`middleware.ts`**: Implements a "Guard" mechanism that ensures all dashboard routes are protected and redirects unauthenticated users to the login page.
+
+---
+
+## 🛠️ Getting Started
+
+### 1. Installation
 
 ```bash
-npm run dev
-# or
-yarn dev
-# or
+pnpm install
+```
+
+### 2. Environment Setup
+
+Create a `.env.local` file in the root directory and add your configuration:
+
+```env
+NEXT_PUBLIC_APP_URL=http://localhost:3000
+# Add other necessary auth/api environment variables
+```
+
+### 3. Development Server
+
+```bash
 pnpm dev
-# or
-bun dev
 ```
 
 Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+---
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+## 🧪 Testing
 
-## Learn More
+The project uses Vitest for unit and integration testing.
 
-To learn more about Next.js, take a look at the following resources:
+```bash
+# Run tests
+pnpm test
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+# Run tests with coverage
+pnpm test --coverage
+```
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+---
 
-## Deploy on Vercel
+## 📦 Deployment
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+The easiest way to deploy is via [Vercel](https://vercel.com/new).
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+For detailed deployment instructions, check out the [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying).
+
