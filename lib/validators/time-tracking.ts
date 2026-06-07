@@ -15,30 +15,6 @@ export const clockOutBodySchema = z.object({
   clockOutIp: z.string().optional().nullable(),
 });
 
-export const breakBodySchema = z
-  .object({
-    userId: z.string().uuid(),
-    companyId: z.string().uuid(),
-    timeLogId: z.string().uuid(),
-    action: z.enum(['START', 'END']),
-    statusId: z.string().uuid().optional(),
-    statusName: z.string().trim().min(1).optional(),
-  })
-  .superRefine((value, ctx) => {
-    if (value.action === 'START' && !value.statusId && !value.statusName) {
-      ctx.addIssue({
-        code: 'custom',
-        message: 'statusId or statusName is required when action is START',
-        path: ['statusId'],
-      });
-    }
-  });
-
-export const activeSessionQuerySchema = z.object({
-  userId: z.string().uuid(),
-  companyId: z.string().uuid(),
-});
-
 export const myDayQuerySchema = z.object({
   userId: z.string().uuid(),
   companyId: z.string().uuid(),
@@ -67,7 +43,5 @@ export const setStatusBodySchema = z
 
 export type ClockInBody = z.infer<typeof clockInBodySchema>;
 export type ClockOutBody = z.infer<typeof clockOutBodySchema>;
-export type BreakBody = z.infer<typeof breakBodySchema>;
-export type ActiveSessionQuery = z.infer<typeof activeSessionQuerySchema>;
 export type MyDayQuery = z.infer<typeof myDayQuerySchema>;
 export type SetStatusBody = z.infer<typeof setStatusBodySchema>;

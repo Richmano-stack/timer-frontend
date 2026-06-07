@@ -1,7 +1,7 @@
 # API Reference — Timer Frontend (Time Tracking)
 
 > **Generated from static analysis of** `app/api/**/*` **and downstream service/validation layers.**  
-> **Last scanned routes:** 6 endpoints under `app/api/time/`  
+> **Last scanned routes:** 6 endpoints (4 time + 2 admin)  
 > **Base URL (local dev):** `http://localhost:3000`
 
 ---
@@ -76,9 +76,8 @@ Defined in `lib/http/api-handler.ts`:
 All time-tracking services resolve identity through `lib/security/tenant-context.ts`:
 
 1. **`resolveTenantContext(userId, companyId)`** — verifies an active `User` row exists for the pair before any tenant-scoped operation proceeds. Returns `403 USER_NOT_IN_COMPANY` on mismatch.
-2. **`assertTimeLogTenantScope(timeLogId, tenant)`** — ensures a `TimeLog` belongs to the verified user and company before break mutations. Returns `404 TIMELOG_NOT_FOUND` when the resource is outside tenant scope.
 
-Verified `userId` / `companyId` values from tenant resolution are used for all subsequent Prisma queries — never raw client identifiers alone.
+Verified `userId` / `companyId` values from tenant resolution are used for all subsequent Prisma queries.
 
 ### Unhandled Server Errors (500)
 
@@ -370,231 +369,14 @@ Uncaught Prisma/transaction errors are intercepted by `executeServiceRoute()`:
 
 ---
 
-## POST /api/time/break
-
-### 1. OVERVIEW
-
-- **Description:** Starts or ends an activity sub-session on an open `TimeLog` — `START` creates an `ActivityLog` row bound to a company-specific `ActivityStatus`; `END` closes the currently open activity by setting `endTime`.
-- **Access Control:** **Public (MVP)** — no session/token validation. `userId` and `companyId` are verified via `resolveTenantContext()` and the target `TimeLog` is scoped with `assertTimeLogTenantScope()` before any activity mutation.
-- **Database operations:**
-  - **Read:** `TimeLog` (existence + open check), `ActivityStatus` (lookup by `statusId` or `name` + `companyId`), `ActivityLog` (open activity lookup)
-  - **Write (`START`):** **Creates** a row in **`ActivityLog`** with resolved `statusId`
-  - **Write (`END`):** **Updates** the open row in **`ActivityLog`** (`endTime` set to server UTC now)
-
-**Source files:** `app/api/time/break/route.ts` → `manageBreakService()` in `lib/services/time-tracking.service.ts`
-
----
-
-### 2. REQUEST PARAMETERS
-
-#### URL / Query Parameters
-
-None.
-
-#### Request Body Payload (`JSON`)
-
-| Field | Type | Required | Validation | Notes |
-|-------|------|----------|------------|-------|
-| `userId` | `string` (UUID) | **Required** | Valid UUID | Verified against company membership |
-| `companyId` | `string` (UUID) | **Required** | Valid UUID | Tenant scope for the operation |
-| `timeLogId` | `string` (UUID) | **Required** | Valid UUID | Target open `TimeLog.id` |
-| `action` | `"START"` \| `"END"` | **Required** | Enum | Determines operation |
-| `statusId` | `string` (UUID) | **Required on START when `statusName` omitted** | Valid UUID | Must belong to the requester's `companyId` |
-| `statusName` | `string` | **Required on START when `statusId` omitted** | Non-empty trim | Exact match against `ActivityStatus.name` for the company |
-
-**Example — start activity by name:**
-
-```json
-{
-  "userId": "00000000-0000-4000-8000-000000000001",
-  "companyId": "00000000-0000-4000-8000-000000000010",
-  "timeLogId": "381ef1ec-cb55-4cf9-b9cd-5ada183e6bea",
-  "action": "START",
-  "statusName": "Lunch"
-}
-```
-
-**Example — start activity by id:**
-
-```json
-{
-  "userId": "00000000-0000-4000-8000-000000000001",
-  "companyId": "00000000-0000-4000-8000-000000000010",
-  "timeLogId": "381ef1ec-cb55-4cf9-b9cd-5ada183e6bea",
-  "action": "START",
-  "statusId": "00000000-0000-4000-8000-000000000101"
-}
-```
-
-**Example — end activity:**
-
-```json
-{
-  "userId": "00000000-0000-4000-8000-000000000001",
-  "companyId": "00000000-0000-4000-8000-000000000010",
-  "timeLogId": "381ef1ec-cb55-4cf9-b9cd-5ada183e6bea",
-  "action": "END"
-}
-```
-
----
-
-### 3. RESPONSE MATRIX
-
-#### Success Response — `200 OK` (START)
-
-```json
-{
-  "success": true,
-  "data": {
-    "activityLog": {
-      "id": "79c9dbf4-b74c-48d5-9164-7f60024de7d6",
-      "timeLogId": "381ef1ec-cb55-4cf9-b9cd-5ada183e6bea",
-      "statusId": "00000000-0000-4000-8000-000000000101",
-      "statusName": "Lunch",
-      "isProductive": false,
-      "startTime": "2026-06-06T12:41:05.624Z",
-      "endTime": null,
-      "createdAt": "2026-06-06T12:41:05.654Z",
-      "updatedAt": "2026-06-06T12:41:05.654Z"
-    }
-  }
-}
-```
-
-#### Success Response — `200 OK` (END)
-
-```json
-{
-  "success": true,
-  "data": {
-    "activityLog": {
-      "id": "79c9dbf4-b74c-48d5-9164-7f60024de7d6",
-      "timeLogId": "381ef1ec-cb55-4cf9-b9cd-5ada183e6bea",
-      "statusId": "00000000-0000-4000-8000-000000000101",
-      "statusName": "Lunch",
-      "isProductive": false,
-      "startTime": "2026-06-06T12:41:05.624Z",
-      "endTime": "2026-06-06T12:45:00.000Z",
-      "createdAt": "2026-06-06T12:41:05.654Z",
-      "updatedAt": "2026-06-06T12:45:00.012Z"
-    }
-  }
-}
-```
-
-#### Error Responses
-
-**400 Bad Request — Invalid JSON**
-
-```json
-{
-  "success": false,
-  "error": {
-    "code": "VALIDATION_ERROR",
-    "message": "Request body must be valid JSON."
-  }
-}
-```
-
-**400 Bad Request — Zod validation (missing `type` on START)**
-
-```json
-{
-  "success": false,
-  "error": {
-    "code": "VALIDATION_ERROR",
-    "message": "type is required when action is START"
-  }
-}
-```
-
-**400 Bad Request — Service-level missing type on START** (defensive path if Zod bypassed)
-
-```json
-{
-  "success": false,
-  "error": {
-    "code": "VALIDATION_ERROR",
-    "message": "Break type is required when starting a break."
-  }
-}
-```
-
-**404 Not Found — Time log does not exist**
-
-```json
-{
-  "success": false,
-  "error": {
-    "code": "TIMELOG_NOT_FOUND",
-    "message": "Time log not found."
-  }
-}
-```
-
-**404 Not Found — Time log already closed**
-
-```json
-{
-  "success": false,
-  "error": {
-    "code": "NO_ACTIVE_SESSION_FOUND",
-    "message": "Cannot manage breaks on a closed time log."
-  }
-}
-```
-
-**404 Not Found — END with no open break**
-
-```json
-{
-  "success": false,
-  "error": {
-    "code": "NO_ACTIVE_BREAK_FOUND",
-    "message": "No active break found to close."
-  }
-}
-```
-
-**409 Conflict — START while break already open**
-
-```json
-{
-  "success": false,
-  "error": {
-    "code": "BREAK_ALREADY_ACTIVE",
-    "message": "An active break is already running for this time log."
-  }
-}
-```
-
-**500 Internal Server Error**
-
-Uncaught Prisma errors are intercepted by `executeServiceRoute()`:
-
-```json
-{
-  "success": false,
-  "error": {
-    "code": "INTERNAL_SERVER_ERROR",
-    "message": "An unexpected error occurred. Please try again later."
-  }
-}
-```
-
----
-
----
-
 ## GET /api/time/my-day
 
 ### 1. OVERVIEW
 
-- **Description:** Returns an employee's day view: active session (if any), company activity statuses for break actions, today's shift rows (`TimeLog`), and today's activity rows (`ActivityLog`).
+- **Description:** Returns an employee's day view: active session (if any), company activity statuses, shift rows (`TimeLog`), activity rows (`ActivityLog`), timeline, and summary. Closed shifts are filtered by `date`; an **open shift is always included in full** from `clockIn` through now, even when `clockIn` falls on a prior calendar day (overnight shifts).
 - **Access Control:** **Public (MVP)** — caller supplies `userId`, `companyId`, and optional `date` as query parameters.
 - **Database operations:**
-  - **Read:** `User`, `ActivityStatus`, `TimeLog` (filtered by date range), nested `ActivityLog`, open session lookup
+  - **Read:** `User`, `ActivityStatus`, `TimeLog` (filtered by date range, plus open shift merge), nested `ActivityLog`, open session lookup
   - **Write:** None
 
 **Source files:** `app/api/time/my-day/route.ts` → `getMyDayService()` in `lib/services/time-tracking.service.ts`
@@ -643,7 +425,7 @@ None.
 }
 ```
 
-When clocked in, `activeSession` matches the shape returned by `GET /api/time/active`. `shifts` and `activities` contain formatted display fields for the employee dashboard tables.
+When clocked in, `activeSession` contains the open `TimeLog` and any open `ActivityLog`. Use this endpoint as the **canonical read** for current session state (replaces the removed `/api/time/active`). Admin agent drill-down also uses this endpoint with any `userId`.
 
 #### Error Responses
 
@@ -678,157 +460,14 @@ Same envelope as other time routes: `VALIDATION_ERROR` (400), `USER_NOT_IN_COMPA
 
 ---
 
-## GET /api/time/active
-
-### 1. OVERVIEW
-
-- **Description:** Returns the user's current open work session (`TimeLog` where `clockOut IS NULL`) and any open activity on that session, or `{ session: null }` if the user is clocked out.
-- **Access Control:** **Public (MVP)** — caller supplies `userId` and `companyId` as query parameters.
-- **Database operations:**
-  - **Read:** `User` (membership check), `TimeLog` + nested `ActivityLog` (open activity, `take: 1`) with `ActivityStatus`
-  - **Write:** None
-
-**Source files:** `app/api/time/active/route.ts` → `getActiveSessionService()` in `lib/services/time-tracking.service.ts`
-
----
-
-### 2. REQUEST PARAMETERS
-
-#### URL / Query Parameters
-
-| Parameter | Type | Required | Validation | Notes |
-|-----------|------|----------|------------|-------|
-| `userId` | `string` (UUID) | **Required** | Valid UUID | Must match an existing `User.id` |
-| `companyId` | `string` (UUID) | **Required** | Valid UUID | User must belong to this company |
-
-**Example request:**
-
-```
-GET /api/time/active?userId=00000000-0000-4000-8000-000000000001&companyId=00000000-0000-4000-8000-000000000010
-```
-
-#### Request Body Payload (`JSON`)
-
-None.
-
----
-
-### 3. RESPONSE MATRIX
-
-#### Success Response — `200 OK` (active session)
-
-```json
-{
-  "success": true,
-  "data": {
-    "session": {
-      "timeLog": {
-        "id": "381ef1ec-cb55-4cf9-b9cd-5ada183e6bea",
-        "userId": "00000000-0000-4000-8000-000000000001",
-        "companyId": "00000000-0000-4000-8000-000000000010",
-        "clockIn": "2026-06-06T12:40:25.170Z",
-        "clockOut": null,
-        "clockInIp": null,
-        "clockOutIp": null,
-        "latitude": null,
-        "longitude": null,
-        "notes": "",
-        "createdAt": "2026-06-06T12:40:25.177Z",
-        "updatedAt": "2026-06-06T12:40:25.177Z"
-      },
-      "activeActivity": {
-        "id": "79c9dbf4-b74c-48d5-9164-7f60024de7d6",
-        "timeLogId": "381ef1ec-cb55-4cf9-b9cd-5ada183e6bea",
-        "statusId": "00000000-0000-4000-8000-000000000101",
-        "statusName": "Lunch",
-        "isProductive": false,
-        "startTime": "2026-06-06T12:41:05.624Z",
-        "endTime": null,
-        "createdAt": "2026-06-06T12:41:05.654Z",
-        "updatedAt": "2026-06-06T12:41:05.654Z"
-      }
-    }
-  }
-}
-```
-
-When no open activity exists, `activeActivity` is `null`:
-
-```json
-{
-  "success": true,
-  "data": {
-    "session": {
-      "timeLog": { },
-      "activeActivity": null
-    }
-  }
-}
-```
-
-#### Success Response — `200 OK` (clocked out)
-
-Not an error — user has no open session:
-
-```json
-{
-  "success": true,
-  "data": {
-    "session": null
-  }
-}
-```
-
-#### Error Responses
-
-**400 Bad Request — Missing or invalid query params**
-
-```json
-{
-  "success": false,
-  "error": {
-    "code": "VALIDATION_ERROR",
-    "message": "Invalid UUID"
-  }
-}
-```
-
-**403 Forbidden — User not in company**
-
-```json
-{
-  "success": false,
-  "error": {
-    "code": "USER_NOT_IN_COMPANY",
-    "message": "User does not belong to the specified company."
-  }
-}
-```
-
-**500 Internal Server Error**
-
-Uncaught Prisma errors are intercepted by `executeServiceRoute()`:
-
-```json
-{
-  "success": false,
-  "error": {
-    "code": "INTERNAL_SERVER_ERROR",
-    "message": "An unexpected error occurred. Please try again later."
-  }
-}
-```
-
----
-
 ## Appendix A — Prisma Tables Referenced
 
 | Table | Model | Used By |
 |-------|-------|---------|
-| `User` | `User` | Clock-in (read), Active session (read) |
-| `TimeLog` | `TimeLog` | All endpoints |
-| `ActivityStatus` | `ActivityStatus` | Break START (read), company-scoped status catalog |
-| `ActivityLog` | `ActivityLog` | Break, Clock-out (update), Active session (read) |
+| `User` | `User` | All endpoints (tenant check) |
+| `TimeLog` | `TimeLog` | All time endpoints; admin overview & timesheets |
+| `ActivityStatus` | `ActivityStatus` | Status switch (read), company status catalog |
+| `ActivityLog` | `ActivityLog` | Status switch, clock-out (update), my-day (read) |
 | `Company` | `Company` | Indirect via foreign keys on `User` / `TimeLog` / `ActivityStatus` |
 
 ---
@@ -839,10 +478,10 @@ Uncaught Prisma errors are intercepted by `executeServiceRoute()`:
 |--------|------|----------------|------------------|
 | `POST` | `/api/time/clock-in` | `POST` | `clockInService` |
 | `POST` | `/api/time/clock-out` | `POST` | `clockOutService` |
-| `POST` | `/api/time/break` | `POST` | `manageBreakService` |
 | `POST` | `/api/time/status` | `POST` | `setStatusService` |
 | `GET` | `/api/time/my-day` | `GET` | `getMyDayService` |
-| `GET` | `/api/time/active` | `GET` | `getActiveSessionService` |
+| `GET` | `/api/admin/overview` | `GET` | `getAdminOverviewService` |
+| `GET` | `/api/admin/timesheets` | `GET` | `getTimesheetsService` |
 
 No routes were found under `pages/api/**` or other API directories at time of scan.
 

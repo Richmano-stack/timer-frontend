@@ -40,16 +40,8 @@ export interface ApiEnvelope<T> {
   };
 }
 
-export interface ActiveSessionResponse {
-  session: ActiveSession | null;
-}
-
 export interface TimeLogResponse {
   timeLog: TimeLog;
-}
-
-export interface ActivityLogResponse {
-  activityLog: ActivityLog;
 }
 
 export interface ActivityStatusOption {

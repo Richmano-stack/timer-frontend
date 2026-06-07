@@ -2,10 +2,7 @@ import { Prisma } from '@prisma/client';
 import { prisma } from '@/lib/db/prisma';
 import { fail, TimeTrackingErrorCodes } from '@/lib/errors/time-tracking';
 import { resolveActivityStatus } from '@/lib/security/activity-status';
-import {
-  assertTimeLogTenantScope,
-  resolveTenantContext,
-} from '@/lib/security/tenant-context';
+import { resolveTenantContext } from '@/lib/security/tenant-context';
 import { ServiceResult } from '@/lib/types/api-response';
 import {
   computeNetWorkMinutes,
@@ -115,6 +112,16 @@ function resolveDateRange(date: string): { rangeStart: Date; rangeEnd: Date } {
   };
 }
 
+/** Open shifts can start on a prior calendar day; always include them in day views. */
+function mergeOpenShiftIntoDayLogs<T extends { id: string }>(
+  dayLogs: T[],
+  openShift: T | null
+): T[] {
+  if (!openShift) return dayLogs;
+  if (dayLogs.some((log) => log.id === openShift.id)) return dayLogs;
+  return [openShift, ...dayLogs];
+}
+
 const activityLogInclude = {
   status: {
     select: {
@@ -215,81 +222,6 @@ export async function clockOutService(
   });
 
   return { success: true, data: { timeLog: serializeTimeLog(timeLog) } };
-}
-
-export async function manageBreakService(
-  userId: string,
-  companyId: string,
-  timeLogId: string,
-  action: 'START' | 'END',
-  statusId?: string,
-  statusName?: string
-): Promise<ServiceResult<{ activityLog: SerializedActivityLog }>> {
-  const tenantResult = await resolveTenantContext(userId, companyId);
-  if (!tenantResult.success) return tenantResult;
-
-  const tenant = tenantResult.data;
-  const scopeResult = await assertTimeLogTenantScope(timeLogId, tenant);
-  if (!scopeResult.success) return scopeResult;
-
-  const timeLog = scopeResult.data;
-
-  if (timeLog.clockOut !== null) {
-    return fail(
-      TimeTrackingErrorCodes.NO_ACTIVE_SESSION_FOUND,
-      'Cannot manage activities on a closed time log.'
-    );
-  }
-
-  const now = utcNow();
-
-  if (action === 'START') {
-    const statusResult = await resolveActivityStatus(tenant.companyId, statusId, statusName);
-    if (!statusResult.success) return statusResult;
-
-    const status = statusResult.data;
-
-    const openActivity = await prisma.activityLog.findFirst({
-      where: { timeLogId, endTime: null },
-    });
-
-    if (openActivity) {
-      return fail(
-        TimeTrackingErrorCodes.BREAK_ALREADY_ACTIVE,
-        'An active activity is already running for this time log.'
-      );
-    }
-
-    const activityLog = await prisma.activityLog.create({
-      data: {
-        timeLogId,
-        statusId: status.id,
-        startTime: now,
-      },
-      include: activityLogInclude,
-    });
-
-    return { success: true, data: { activityLog: serializeActivityLog(activityLog) } };
-  }
-
-  const openActivity = await prisma.activityLog.findFirst({
-    where: { timeLogId, endTime: null },
-  });
-
-  if (!openActivity) {
-    return fail(
-      TimeTrackingErrorCodes.NO_ACTIVE_BREAK_FOUND,
-      'No active activity found to close.'
-    );
-  }
-
-  const activityLog = await prisma.activityLog.update({
-    where: { id: openActivity.id },
-    data: { endTime: now },
-    include: activityLogInclude,
-  });
-
-  return { success: true, data: { activityLog: serializeActivityLog(activityLog) } };
 }
 
 export async function setStatusService(
@@ -466,44 +398,6 @@ function buildMyDayTimeline(
   );
 }
 
-export async function getActiveSessionService(
-  userId: string,
-  companyId: string
-): Promise<ServiceResult<{ session: ActiveSession | null }>> {
-  const tenantResult = await resolveTenantContext(userId, companyId);
-  if (!tenantResult.success) return tenantResult;
-
-  const tenant = tenantResult.data;
-
-  const timeLog = await prisma.timeLog.findFirst({
-    where: { userId: tenant.userId, companyId: tenant.companyId, clockOut: null },
-    include: {
-      activityLogs: {
-        where: { endTime: null },
-        take: 1,
-        include: activityLogInclude,
-      },
-    },
-  });
-
-  if (!timeLog) {
-    return { success: true, data: { session: null } };
-  }
-
-  const { activityLogs, ...timeLogData } = timeLog;
-  const activeActivity = activityLogs[0] ?? null;
-
-  return {
-    success: true,
-    data: {
-      session: {
-        timeLog: serializeTimeLog(timeLogData),
-        activeActivity: activeActivity ? serializeActivityLog(activeActivity) : null,
-      },
-    },
-  };
-}
-
 export async function getMyDayService(
   userId: string,
   companyId: string,
@@ -544,9 +438,8 @@ export async function getMyDayService(
       where: { userId: tenant.userId, companyId: tenant.companyId, clockOut: null },
       include: {
         activityLogs: {
-          where: { endTime: null },
-          take: 1,
           include: activityLogInclude,
+          orderBy: { startTime: 'asc' },
         },
       },
     }),
@@ -559,14 +452,17 @@ export async function getMyDayService(
   let activeSession: ActiveSession | null = null;
   if (activeTimeLog) {
     const { activityLogs, ...timeLogData } = activeTimeLog;
-    const activeActivity = activityLogs[0] ?? null;
+    const activeActivity =
+      [...activityLogs].reverse().find((entry) => entry.endTime === null) ?? null;
     activeSession = {
       timeLog: serializeTimeLog(timeLogData),
       activeActivity: activeActivity ? serializeActivityLog(activeActivity) : null,
     };
   }
 
-  const shifts: MyDayShiftRow[] = logs.map((log) => {
+  const effectiveLogs = mergeOpenShiftIntoDayLogs(logs, activeTimeLog);
+
+  const shifts: MyDayShiftRow[] = effectiveLogs.map((log) => {
     const serialized = serializeTimeLog(log);
     const activities = log.activityLogs.map((entry) => serializeActivityLog(entry));
     const clockInIso = isoField(serialized.clockIn);
@@ -597,7 +493,7 @@ export async function getMyDayService(
     };
   });
 
-  const activities: MyDayActivityRow[] = logs.flatMap((log) => {
+  const activities: MyDayActivityRow[] = effectiveLogs.flatMap((log) => {
     const shiftClockInFormatted = formatTimeLocal(isoField(serializeTimeLog(log).clockIn));
     return log.activityLogs.map((entry) => {
       const serialized = serializeActivityLog(entry);
@@ -626,8 +522,8 @@ export async function getMyDayService(
       activityStatuses,
       shifts,
       activities,
-      timeline: buildMyDayTimeline(logs),
-      summary: computeDaySummary(logs),
+      timeline: buildMyDayTimeline(effectiveLogs),
+      summary: computeDaySummary(effectiveLogs),
     },
   };
 }

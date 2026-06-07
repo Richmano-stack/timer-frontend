@@ -39,10 +39,10 @@ export function TodayStatusLog({
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
             <p className="text-xs font-semibold uppercase tracking-widest text-sage/50">
-              Today&apos;s Status Log
+              Shift Status Log
             </p>
             <p className="mt-1 text-sm text-sage/70">
-              Live view of shift and status changes for audit and self-check.
+              Full history for the current shift, including status changes since clock-in.
             </p>
           </div>
           <p className="rounded-full bg-mint px-3 py-1 text-xs font-semibold text-sage">
@@ -83,7 +83,7 @@ export function TodayStatusLog({
                     </TableRow>
                   ))
                 ) : (
-                  <TableEmptyState message="No status changes recorded today." />
+                  <TableEmptyState message="No shift activity recorded yet." />
                 )}
               </TableBody>
             </Table>
