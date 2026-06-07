@@ -1,64 +1,88 @@
 const IS_SERVER = typeof window === 'undefined';
 const API_URL = IS_SERVER
-    ? (process.env.NEXT_PUBLIC_API_URL || 'http://127.0.0.1:4000')
-    : ''; // Use relative path on client to hit the Next.js proxy
+    ? (process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3000')
+    : (process.env.NEXT_PUBLIC_API_URL || '');
 
 interface FetchOptions extends RequestInit {
     headers?: Record<string, string>;
 }
 
+export interface ApiEnvelope<T> {
+    success: boolean;
+    data?: T;
+    error?: {
+        code: string;
+        message: string;
+    };
+}
+
 export class ApiError extends Error {
     public statusCode: number;
+    public code?: string;
 
-    constructor(message: string, statusCode: number) {
+    constructor(message: string, statusCode: number, code?: string) {
         super(message);
         this.statusCode = statusCode;
+        this.code = code;
         this.name = 'ApiError';
     }
+}
+
+export function parseApiResponse<T>(payload: ApiEnvelope<T>): T {
+    if (!payload.success) {
+        throw new ApiError(
+            payload.error?.message || 'Request failed',
+            400,
+            payload.error?.code
+        );
+    }
+
+    return payload.data as T;
 }
 
 async function fetcher<T>(endpoint: string, options: FetchOptions = {}): Promise<T> {
     const url = `${API_URL}${endpoint}`;
 
-    // Get JWT token from localStorage (only on client side)
-    const token = typeof window !== 'undefined' ? localStorage.getItem('auth_token') : null;
-
-    const defaultHeaders = {
-        'Content-Type': 'application/json',
-        ...(token && { 'Authorization': `Bearer ${token}` }),
-    };
-
     const config: RequestInit = {
         ...options,
         headers: {
-            ...defaultHeaders,
+            'Content-Type': 'application/json',
             ...options.headers,
         },
-        credentials: 'include', // Important for cookie-based auth
     };
 
     try {
         const response = await fetch(url, config);
+        const payload = await response.json().catch(() => null);
+
+        if (payload && typeof payload === 'object' && 'success' in payload) {
+            if (!response.ok || payload.success === false) {
+                throw new ApiError(
+                    payload.error?.message || response.statusText,
+                    response.status,
+                    payload.error?.code
+                );
+            }
+
+            return payload.data as T;
+        }
 
         if (!response.ok) {
-            // Try to parse error message from JSON response
             let errorMessage = 'An error occurred';
-            try {
-                const errorData = await response.json();
-                errorMessage = errorData.message || response.statusText;
-            } catch {
+            if (payload && typeof payload === 'object' && 'message' in payload) {
+                errorMessage = (payload as { message?: string }).message || response.statusText;
+            } else {
                 errorMessage = response.statusText;
             }
 
             throw new ApiError(errorMessage, response.status);
         }
 
-        // Handle 204 No Content
         if (response.status === 204) {
             return {} as T;
         }
 
-        return await response.json();
+        return payload as T;
     } catch (error) {
         if (error instanceof ApiError) {
             throw error;

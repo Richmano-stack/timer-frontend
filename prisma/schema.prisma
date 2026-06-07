@@ -1,0 +1,92 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum UserRole {
+  SUPER_ADMIN
+  ORG_ADMIN
+  MANAGER
+  EMPLOYEE
+}
+
+model Company {
+  id               String           @id @default(uuid())
+  name             String
+  createdAt        DateTime         @default(now()) @db.Timestamptz(3)
+  updatedAt        DateTime         @updatedAt @db.Timestamptz(3)
+  users            User[]
+  timeLogs         TimeLog[]
+  activityStatuses ActivityStatus[]
+}
+
+model User {
+  id        String   @id @default(uuid())
+  companyId String
+  email     String
+  name      String
+  role      UserRole @default(EMPLOYEE)
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt DateTime @updatedAt @db.Timestamptz(3)
+  company   Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  timeLogs  TimeLog[]
+
+  @@unique([companyId, email])
+  @@index([companyId])
+}
+
+model ActivityStatus {
+  id           String        @id @default(uuid())
+  companyId    String
+  name         String
+  isProductive Boolean       @default(false)
+  createdAt    DateTime      @default(now()) @db.Timestamptz(3)
+  updatedAt    DateTime      @updatedAt @db.Timestamptz(3)
+  company      Company       @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  activityLogs ActivityLog[]
+
+  @@unique([companyId, name])
+  @@index([companyId])
+}
+
+model TimeLog {
+  id             String        @id @default(uuid())
+  userId         String
+  companyId      String
+  clockIn        DateTime      @default(now()) @db.Timestamptz(3)
+  clockOut       DateTime?     @db.Timestamptz(3)
+  netWorkMinutes Int?
+  clockInIp      String?
+  clockOutIp     String?
+  latitude       Decimal?      @db.Decimal(10, 8)
+  longitude      Decimal?      @db.Decimal(11, 8)
+  notes          String        @default("")
+  createdAt      DateTime      @default(now()) @db.Timestamptz(3)
+  updatedAt      DateTime      @updatedAt @db.Timestamptz(3)
+  user           User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  company        Company       @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  activityLogs   ActivityLog[]
+
+  @@index([userId, companyId, clockOut])
+  @@index([companyId, clockIn])
+}
+
+model ActivityLog {
+  id        String         @id @default(uuid())
+  timeLogId String
+  statusId  String
+  startTime DateTime       @default(now()) @db.Timestamptz(3)
+  endTime   DateTime?      @db.Timestamptz(3)
+  createdAt DateTime       @default(now()) @db.Timestamptz(3)
+  updatedAt DateTime       @updatedAt @db.Timestamptz(3)
+  timeLog   TimeLog        @relation(fields: [timeLogId], references: [id], onDelete: Cascade)
+  status    ActivityStatus @relation(fields: [statusId], references: [id], onDelete: Restrict)
+
+  @@index([timeLogId, endTime])
+}
+

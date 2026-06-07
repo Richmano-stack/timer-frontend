@@ -1,15 +1,13 @@
-import type { Metadata } from "next";
-import { Inter } from "next/font/google";
-import "./globals.css";
+import type { Metadata } from 'next';
+import { Inter } from 'next/font/google';
+import './globals.css';
 
-const inter = Inter({ subsets: ["latin"] });
+const inter = Inter({ subsets: ['latin'] });
 
 export const metadata: Metadata = {
-  title: "Timer App",
-  description: "Team status tracking application",
+  title: 'Time Card',
+  description: 'Employee time tracking',
 };
-
-import NextTopLoader from 'nextjs-toploader';
 
 export default function RootLayout({
   children,
@@ -18,18 +16,7 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en">
-      <body className={inter.className}>
-        <NextTopLoader
-          color="#000"
-          initialPosition={0.08}
-          crawlSpeed={200}
-          height={3}
-          crawl={true}
-          showSpinner={true}
-          easing="ease"
-          speed={200}
-          shadow="0 0 10px #000,0 0 5px #000"
-        />
+      <body className={`${inter.className} min-h-screen bg-[#030712] antialiased`}>
         {children}
       </body>
     </html>

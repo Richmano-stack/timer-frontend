@@ -4,16 +4,27 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
+    "predev": "prisma generate",
     "build": "next build",
+    "prebuild": "prisma generate",
     "start": "next start",
     "lint": "eslint",
     "test": "vitest",
     "test:run": "vitest run",
-    "test:coverage": "vitest run --coverage"
+    "test:coverage": "vitest run --coverage",
+    "db:up": "docker compose up -d",
+    "db:down": "docker compose down",
+    "db:generate": "prisma generate",
+    "db:migrate": "prisma migrate dev",
+    "db:seed": "prisma db seed",
+    "db:studio": "prisma studio"
+  },
+  "prisma": {
+    "seed": "tsx prisma/seed.ts"
   },
   "dependencies": {
+    "@prisma/client": "^6.19.0",
     "@hookform/resolvers": "^5.2.2",
-    "better-auth": "^1.4.17",
     "lucide-react": "^0.562.0",
     "next": "16.1.1",
     "nextjs-toploader": "^3.9.17",
@@ -32,6 +43,8 @@
     "eslint": "^9",
     "eslint-config-next": "16.1.1",
     "jsdom": "^28.0.0",
+    "prisma": "^6.19.0",
+    "tsx": "^4.21.0",
     "tailwindcss": "^4",
     "typescript": "^5",
     "vitest": "^4.0.18"
