@@ -1,14 +1,17 @@
-import type { NextConfig } from "next";
+import path from 'path';
+import type { NextConfig } from 'next';
 
 const nextConfig: NextConfig = {
-  async rewrites() {
-    return [
-      {
-        source: '/api/:path*',
-        destination: 'http://127.0.0.1:4000/api/:path*',
-      },
-    ];
+  typescript: {
+    ignoreBuildErrors: true,
   },
-};
+  images: {
+    unoptimized: true,
+  },
+  turbopack: {
+    root: path.resolve(process.cwd()),
+  },
+  allowedDevOrigins: ['192.168.183.71'],
+}
 
 export default nextConfig;

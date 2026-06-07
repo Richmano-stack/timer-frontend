@@ -1,0 +1,21 @@
+export const TimeTrackingErrorCodes = {
+  USER_ALREADY_CLOCKED_IN: 'USER_ALREADY_CLOCKED_IN',
+  NO_ACTIVE_SESSION_FOUND: 'NO_ACTIVE_SESSION_FOUND',
+  BREAK_ALREADY_ACTIVE: 'BREAK_ALREADY_ACTIVE',
+  NO_ACTIVE_BREAK_FOUND: 'NO_ACTIVE_BREAK_FOUND',
+  TIMELOG_NOT_FOUND: 'TIMELOG_NOT_FOUND',
+  USER_NOT_IN_COMPANY: 'USER_NOT_IN_COMPANY',
+  VALIDATION_ERROR: 'VALIDATION_ERROR',
+  ACTIVITY_STATUS_NOT_FOUND: 'ACTIVITY_STATUS_NOT_FOUND',
+  INTERNAL_SERVER_ERROR: 'INTERNAL_SERVER_ERROR',
+} as const;
+
+export type TimeTrackingErrorCode =
+  (typeof TimeTrackingErrorCodes)[keyof typeof TimeTrackingErrorCodes];
+
+export function fail<T>(
+  code: TimeTrackingErrorCode,
+  message: string
+): { success: false; error: { code: string; message: string } } {
+  return { success: false, error: { code, message } };
+}
