@@ -49,16 +49,6 @@ export interface FloorAgentRow {
   isOnShift: boolean;
 }
 
-export interface ActiveWorkerRow {
-  userId: string;
-  employeeName: string;
-  timeLogId: string;
-  clockIn: string;
-  status: 'working' | 'on_break';
-  statusLabel: string;
-  activityStatusName: string | null;
-}
-
 export interface ComplianceAlert {
   userId: string;
   employeeName: string;
@@ -74,7 +64,6 @@ export interface AdminOverviewData {
   statusBreakdown: StatusBreakdownItem[];
   floorAgents: FloorAgentRow[];
   complianceAlerts: ComplianceAlert[];
-  activeWorkers: ActiveWorkerRow[];
 }
 
 export interface TimesheetRow {
@@ -88,15 +77,6 @@ export interface TimesheetRow {
   clockOutFormatted: string;
   breakDeductions: string;
   netWorkHours: string;
-}
-
-export interface EmployeeHistoryRow {
-  timeLogId: string;
-  clockIn: string;
-  clockOut: string | null;
-  breakDeductions: string;
-  netWorkHours: string;
-  notes: string;
 }
 
 function computeNonProductiveMs(
@@ -117,27 +97,6 @@ function computeNonProductiveMs(
   }
 
   return total;
-}
-
-function toLegacyActiveWorker(log: {
-  id: string;
-  user: { id: string; name: string };
-  clockIn: Date;
-  activityLogs: { status: { name: string; isProductive: boolean } }[];
-}): ActiveWorkerRow {
-  const openActivity = log.activityLogs[0] ?? null;
-  const activityStatusName = openActivity?.status.name ?? null;
-  const isNonProductiveBreak = openActivity ? !openActivity.status.isProductive : false;
-
-  return {
-    userId: log.user.id,
-    employeeName: log.user.name,
-    timeLogId: log.id,
-    clockIn: isoField(log.clockIn),
-    status: isNonProductiveBreak ? 'on_break' : 'working',
-    statusLabel: activityStatusName ?? 'Available',
-    activityStatusName,
-  };
 }
 
 export async function getAdminOverviewService(
@@ -297,14 +256,6 @@ export async function getAdminOverviewService(
     }
   }
 
-  const activeWorkers: ActiveWorkerRow[] = activeLogs.map((log) => {
-    const openOnly = [...log.activityLogs].reverse().find((entry) => entry.endTime === null);
-    return toLegacyActiveWorker({
-      ...log,
-      activityLogs: openOnly ? [openOnly] : [],
-    });
-  });
-
   return {
     success: true,
     data: {
@@ -318,7 +269,6 @@ export async function getAdminOverviewService(
       statusBreakdown,
       floorAgents,
       complianceAlerts,
-      activeWorkers,
     },
   };
 }
@@ -386,53 +336,4 @@ export async function getTimesheetsService(
 
 function nowMsFromLog(log: { clockOut: Date | null }): number {
   return log.clockOut ? log.clockOut.getTime() : Date.now();
-}
-
-export async function getEmployeeHistoryService(
-  companyId: string,
-  userId: string,
-  limit: number
-): Promise<ServiceResult<{ employeeName: string; sessions: EmployeeHistoryRow[] }>> {
-  const user = await prisma.user.findFirst({
-    where: { id: userId, companyId },
-  });
-
-  if (!user) {
-    return fail(TimeTrackingErrorCodes.USER_NOT_IN_COMPANY, 'Employee not found in this company.');
-  }
-
-  const logs = await prisma.timeLog.findMany({
-    where: { companyId, userId },
-    include: { activityLogs: { include: { status: { select: { isProductive: true } } } } },
-    orderBy: { clockIn: 'desc' },
-    take: limit,
-  });
-
-  const sessions: EmployeeHistoryRow[] = logs.map((log) => {
-    const serialized = serializeTimeLog(log);
-    const clockInIso = isoField(serialized.clockIn);
-    const clockOutIso = isoFieldOrNull(serialized.clockOut);
-    const clockOutMs = clockOutIso ? new Date(clockOutIso).getTime() : Date.now();
-    const grossMs = Math.max(0, clockOutMs - new Date(clockInIso).getTime());
-    const nonProductiveMs = computeNonProductiveMs(log.activityLogs, nowMsFromLog(log));
-
-    const netWorkHours =
-      log.netWorkMinutes != null
-        ? formatNetWorkMinutes(log.netWorkMinutes)
-        : formatDurationHours(Math.max(0, grossMs - nonProductiveMs));
-
-    return {
-      timeLogId: log.id,
-      clockIn: isoField(serialized.clockIn),
-      clockOut: isoFieldOrNull(serialized.clockOut),
-      breakDeductions: formatDurationHuman(nonProductiveMs),
-      netWorkHours,
-      notes: String(serialized.notes),
-    };
-  });
-
-  return {
-    success: true,
-    data: { employeeName: user.name, sessions },
-  };
 }

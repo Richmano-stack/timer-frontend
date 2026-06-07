@@ -4,7 +4,6 @@ import { useCallback, useEffect, useState } from 'react';
 import { api, ApiError } from '@/lib/api';
 import {
   ActiveSession,
-  ActivityLogResponse,
   ActivityStatusOption,
   MyDayResponse,
   SetStatusResponse,
@@ -35,11 +34,6 @@ export interface ClockInOptions {
   latitude?: number | null;
   longitude?: number | null;
   clockInIp?: string | null;
-}
-
-export interface StartActivityOptions {
-  statusId?: string;
-  statusName?: string;
 }
 
 export function useTimeTracking() {
@@ -151,45 +145,6 @@ export function useTimeTracking() {
     });
   }, [runAction]);
 
-  const startBreak = useCallback(
-    async (options: StartActivityOptions) => {
-      const { userId, companyId } = getIdentity();
-      if (!session?.timeLog.id) {
-        setError('No active time log found.');
-        return;
-      }
-
-      await runAction(async () => {
-        await api.post<ActivityLogResponse>('/api/time/break', {
-          userId,
-          companyId,
-          timeLogId: session.timeLog.id,
-          action: 'START',
-          statusId: options.statusId,
-          statusName: options.statusName,
-        });
-      });
-    },
-    [runAction, session?.timeLog.id]
-  );
-
-  const endBreak = useCallback(async () => {
-    const { userId, companyId } = getIdentity();
-    if (!session?.timeLog.id) {
-      setError('No active time log found.');
-      return;
-    }
-
-    await runAction(async () => {
-      await api.post<ActivityLogResponse>('/api/time/break', {
-        userId,
-        companyId,
-        timeLogId: session.timeLog.id,
-        action: 'END',
-      });
-    });
-  }, [runAction, session?.timeLog.id]);
-
   const setAvailable = useCallback(async () => {
     const { userId, companyId } = getIdentity();
     await runAction(async () => {
@@ -226,8 +181,6 @@ export function useTimeTracking() {
     clockOut,
     setAvailable,
     setStatus,
-    startBreak,
-    endBreak,
     refresh,
   };
 }

@@ -24,17 +24,6 @@ export interface FloorAgentRow {
   isOnShift: boolean;
 }
 
-/** @deprecated Use FloorAgentRow — kept for transitional typing in older callers */
-export interface ActiveWorkerRow {
-  userId: string;
-  employeeName: string;
-  timeLogId: string;
-  clockIn: string;
-  status: 'working' | 'on_break';
-  statusLabel: string;
-  activityStatusName: string | null;
-}
-
 export interface ComplianceAlert {
   userId: string;
   employeeName: string;
@@ -50,8 +39,6 @@ export interface AdminOverviewResponse {
   statusBreakdown: StatusBreakdownItem[];
   floorAgents: FloorAgentRow[];
   complianceAlerts: ComplianceAlert[];
-  /** Agents currently on shift — subset of floorAgents for backwards compatibility */
-  activeWorkers: ActiveWorkerRow[];
 }
 
 export interface TimesheetRow {
@@ -69,20 +56,6 @@ export interface TimesheetRow {
 
 export interface TimesheetsResponse {
   rows: TimesheetRow[];
-}
-
-export interface EmployeeHistorySession {
-  timeLogId: string;
-  clockIn: string;
-  clockOut: string | null;
-  breakDeductions: string;
-  netWorkHours: string;
-  notes: string;
-}
-
-export interface EmployeeHistoryResponse {
-  employeeName: string;
-  sessions: EmployeeHistorySession[];
 }
 
 export type FloorStatusFilter =

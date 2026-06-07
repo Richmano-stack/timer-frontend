@@ -70,37 +70,6 @@ export const SANDBOX_ENDPOINTS: SandboxEndpoint[] = [
     ],
   },
   {
-    id: 'active-session',
-    method: 'GET',
-    path: '/api/time/active',
-    title: 'Get Active Session',
-    description:
-      'Returns the open TimeLog and any active ActivityLog for a user, or session: null when clocked out.',
-    dbNote: 'Read-only: User, TimeLog, ActivityLog, ActivityStatus',
-    usesQueryParams: true,
-    defaultPayload: pretty({
-      userId: DEV_USER_ID,
-      companyId: DEV_COMPANY_ID,
-    }),
-    presets: [
-      {
-        label: 'Valid Payload Preset',
-        payload: pretty({ userId: DEV_USER_ID, companyId: DEV_COMPANY_ID }),
-      },
-      {
-        label: 'Malformed/Invalid Data Preset',
-        payload: pretty({ userId: 'not-a-uuid', companyId: DEV_COMPANY_ID }),
-      },
-      {
-        label: 'Unknown User Preset',
-        payload: pretty({
-          userId: '00000000-0000-4000-8000-000000009999',
-          companyId: DEV_COMPANY_ID,
-        }),
-      },
-    ],
-  },
-  {
     id: 'clock-in',
     method: 'POST',
     path: '/api/time/clock-in',
@@ -213,96 +182,6 @@ export const SANDBOX_ENDPOINTS: SandboxEndpoint[] = [
         payload: pretty({
           userId: '00000000-0000-4000-8000-000000009999',
           companyId: DEV_COMPANY_ID,
-        }),
-      },
-    ],
-  },
-  {
-    id: 'break-start',
-    method: 'POST',
-    path: '/api/time/break',
-    title: 'Break — Start',
-    description:
-      'Starts an activity on an open TimeLog. Requires action START and statusId or statusName.',
-    dbNote: 'Creates row in ActivityLog',
-    defaultPayload: pretty({
-      userId: DEV_USER_ID,
-      companyId: DEV_COMPANY_ID,
-      timeLogId: 'REPLACE_WITH_ACTIVE_TIMELOG_ID',
-      action: 'START',
-      statusId: DEV_STATUS_LUNCH_ID,
-    }),
-    presets: [
-      {
-        label: 'Valid Payload Preset',
-        payload: pretty({
-          userId: DEV_USER_ID,
-          companyId: DEV_COMPANY_ID,
-          timeLogId: 'REPLACE_WITH_ACTIVE_TIMELOG_ID',
-          action: 'START',
-          statusName: 'Short Break',
-        }),
-      },
-      {
-        label: 'Malformed/Invalid Data Preset',
-        payload: pretty({
-          userId: DEV_USER_ID,
-          companyId: DEV_COMPANY_ID,
-          timeLogId: 'REPLACE_WITH_ACTIVE_TIMELOG_ID',
-          action: 'START',
-        }),
-      },
-      {
-        label: 'Invalid TimeLog Preset',
-        payload: pretty({
-          userId: DEV_USER_ID,
-          companyId: DEV_COMPANY_ID,
-          timeLogId: '00000000-0000-4000-8000-000000009999',
-          action: 'START',
-          statusName: 'Meeting',
-        }),
-      },
-    ],
-  },
-  {
-    id: 'break-end',
-    method: 'POST',
-    path: '/api/time/break',
-    title: 'Break — End',
-    description: 'Closes the currently open break on the given TimeLog.',
-    dbNote: 'Updates ActivityLog.endTime',
-    defaultPayload: pretty({
-      userId: DEV_USER_ID,
-      companyId: DEV_COMPANY_ID,
-      timeLogId: 'REPLACE_WITH_ACTIVE_TIMELOG_ID',
-      action: 'END',
-    }),
-    presets: [
-      {
-        label: 'Valid Payload Preset',
-        payload: pretty({
-          userId: DEV_USER_ID,
-          companyId: DEV_COMPANY_ID,
-          timeLogId: 'REPLACE_WITH_ACTIVE_TIMELOG_ID',
-          action: 'END',
-        }),
-      },
-      {
-        label: 'Malformed/Invalid Data Preset',
-        payload: pretty({
-          userId: 'not-uuid',
-          companyId: DEV_COMPANY_ID,
-          timeLogId: 'REPLACE_WITH_ACTIVE_TIMELOG_ID',
-          action: 'END',
-        }),
-      },
-      {
-        label: 'No Active Break Preset',
-        payload: pretty({
-          userId: DEV_USER_ID,
-          companyId: DEV_COMPANY_ID,
-          timeLogId: '00000000-0000-4000-8000-000000009999',
-          action: 'END',
         }),
       },
     ],
