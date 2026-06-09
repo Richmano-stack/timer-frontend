@@ -15,9 +15,10 @@ import {
 } from '@/components/ui/Table';
 import { FLOOR_FILTER_OPTIONS, matchesFloorFilter } from '@/lib/utils/floor-filters';
 import { formatElapsed, formatShiftStarted } from '@/lib/utils/format-time';
+import { cn } from '@/lib/utils';
 import { ComplianceAlert, FloorAgentRow, FloorStatusFilter } from '@/types/admin-dashboard';
 
-function StatusElapsed({ since }: { since: string }) {
+function StatusElapsed({ since, isRunning }: { since: string; isRunning: boolean }) {
   const [elapsed, setElapsed] = useState(() => formatElapsed(since));
 
   useEffect(() => {
@@ -27,13 +28,22 @@ function StatusElapsed({ since }: { since: string }) {
     return () => clearInterval(interval);
   }, [since]);
 
-  return <span className="font-mono tabular-nums">{elapsed}</span>;
+  return (
+    <span
+      className={cn(
+        'font-mono tabular-nums transition-colors duration-300',
+        isRunning ? 'timer-running' : 'timer-paused'
+      )}
+    >
+      {elapsed}
+    </span>
+  );
 }
 
 function agentRowClass(agent: FloorAgentRow): string | undefined {
-  if (!agent.isOnShift) return 'opacity-70';
-  if (agent.isProductive === false) return 'bg-mauve/5 hover:bg-mauve/10';
-  if (agent.displayStatus === 'Available') return 'bg-mint/20 hover:bg-mint/30';
+  if (!agent.isOnShift) return 'opacity-60';
+  if (agent.isProductive === false) return 'bg-background hover:bg-background/80';
+  if (agent.displayStatus === 'Available') return 'bg-brand-accent/5 hover:bg-brand-accent/10';
   return undefined;
 }
 
@@ -66,23 +76,24 @@ export function LiveFloorTable({
   const filteredAgents = agents.filter((agent) => matchesFloorFilter(agent, filter));
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col">
-      <div className="flex flex-wrap items-center gap-2 border-b border-mist px-4 py-3">
+    <div className="flex min-h-0 flex-1 flex-col bg-background">
+      <div className="flex flex-wrap items-center gap-2 border-b border-border bg-card px-4 py-3">
         {FLOOR_FILTER_OPTIONS.map((option) => (
           <button
             key={option.id}
             type="button"
             onClick={() => onFilterChange(option.id)}
-            className={`rounded-full px-3 py-1 text-xs font-semibold transition ${
+            className={cn(
+              'rounded-full px-3 py-1 text-xs font-semibold transition',
               filter === option.id
-                ? 'bg-sage text-ice'
-                : 'border border-mist bg-white text-sage hover:bg-mint/40'
-            }`}
+                ? 'bg-brand-accent text-white'
+                : 'border border-border bg-card text-foreground hover:bg-background'
+            )}
           >
             {option.label}
           </button>
         ))}
-        <span className="ml-auto text-xs text-sage/50">
+        <span className="ml-auto text-xs text-muted-foreground">
           {filteredAgents.length} agent{filteredAgents.length === 1 ? '' : 's'}
         </span>
       </div>
@@ -115,7 +126,10 @@ export function LiveFloorTable({
                       </TableCell>
                       <TableCell>
                         {agent.statusSince ? (
-                          <StatusElapsed since={agent.statusSince} />
+                          <StatusElapsed
+                            since={agent.statusSince}
+                            isRunning={agent.isOnShift}
+                          />
                         ) : (
                           '—'
                         )}
@@ -128,7 +142,7 @@ export function LiveFloorTable({
                         <button
                           type="button"
                           onClick={() => onSelectAgent(agent.userId)}
-                          className="text-xs font-semibold text-mauve hover:underline"
+                          className="text-xs font-semibold text-indigo-600 transition hover:underline dark:text-indigo-400"
                         >
                           Today&apos;s Log
                         </button>
@@ -157,12 +171,14 @@ export function ExceptionsPanel({
   onSelectAgent: (userId: string) => void;
 }) {
   return (
-    <aside className="flex w-[320px] shrink-0 flex-col border-l border-mist bg-white">
-      <div className="border-b border-mist px-4 py-4">
-        <p className="text-xs font-semibold uppercase tracking-widest text-sage/50">
+    <aside className="flex w-[320px] shrink-0 flex-col border-l border-border bg-card">
+      <div className="border-b border-border px-4 py-4">
+        <p className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">
           Exceptions
         </p>
-        <p className="mt-1 text-sm text-sage/70">Issues requiring supervisor attention</p>
+        <p className="mt-1 text-sm text-muted-foreground">
+          Issues requiring supervisor attention
+        </p>
       </div>
 
       <div className="min-h-0 flex-1 overflow-y-auto p-4">
@@ -173,9 +189,11 @@ export function ExceptionsPanel({
             ))}
           </div>
         ) : alerts.length === 0 ? (
-          <div className="rounded-lg border border-mist bg-mint/20 px-4 py-6 text-center">
-            <p className="text-sm font-semibold text-sage">All clear</p>
-            <p className="mt-1 text-xs text-sage/60">No compliance exceptions right now.</p>
+          <div className="rounded-lg border border-border bg-brand-accent/5 px-4 py-6 text-center">
+            <p className="text-sm font-semibold text-foreground">All clear</p>
+            <p className="mt-1 text-xs text-muted-foreground">
+              No compliance exceptions right now.
+            </p>
           </div>
         ) : (
           <div className="space-y-3">
@@ -184,15 +202,16 @@ export function ExceptionsPanel({
                 key={`${alert.timeLogId}-${alert.message}`}
                 type="button"
                 onClick={() => onSelectAgent(alert.userId)}
-                className={`w-full rounded-lg border px-4 py-3 text-left transition hover:shadow-sm ${
+                className={cn(
+                  'w-full rounded-lg border px-4 py-3 text-left transition hover:shadow-sm',
                   alert.severity === 'critical'
-                    ? 'border-mauve/40 bg-mauve/10 hover:bg-mauve/15'
-                    : 'border-sage/20 bg-mint/30 hover:bg-mint/40'
-                }`}
+                    ? 'border-border bg-background hover:bg-background/80'
+                    : 'border-brand-accent/20 bg-brand-accent/5 hover:bg-brand-accent/10'
+                )}
               >
-                <p className="font-semibold text-sage">{alert.employeeName}</p>
-                <p className="mt-1 text-sm text-sage/80">{alert.message}</p>
-                <p className="mt-2 text-xs text-sage/50">
+                <p className="font-semibold text-foreground">{alert.employeeName}</p>
+                <p className="mt-1 text-sm text-muted-foreground">{alert.message}</p>
+                <p className="mt-2 text-xs text-muted-foreground">
                   Shift since {formatShiftStarted(alert.clockIn)}
                 </p>
               </button>

@@ -122,7 +122,7 @@ function EndpointCard({ endpoint }: { endpoint: SandboxEndpoint }) {
 
     try {
       let url = endpoint.path;
-      const init: RequestInit = { method: endpoint.method };
+      const init: RequestInit = { method: endpoint.method, credentials: 'include' };
 
       if (endpoint.method === 'GET') {
         const parsed = JSON.parse(payload) as Record<string, string>;

@@ -9,9 +9,6 @@ import { Toast, ToastStack } from '@/components/ui/Toast';
 import { api, ApiError } from '@/lib/api';
 import { AdminOverviewResponse, FloorStatusFilter } from '@/types/admin-dashboard';
 
-const DEV_COMPANY_ID =
-  process.env.NEXT_PUBLIC_DEV_COMPANY_ID ?? '00000000-0000-4000-8000-000000000010';
-
 const POLL_INTERVAL_MS = 15_000;
 
 export function AdminOverviewDashboard() {
@@ -24,10 +21,7 @@ export function AdminOverviewDashboard() {
 
   const loadOverview = useCallback(async () => {
     try {
-      const params = new URLSearchParams({ companyId: DEV_COMPANY_ID });
-      const data = await api.get<AdminOverviewResponse>(
-        `/api/admin/overview?${params.toString()}`
-      );
+      const data = await api.get<AdminOverviewResponse>('/api/admin/overview');
       setOverview(data);
       setLastUpdated(new Date());
     } catch (err) {
@@ -47,29 +41,31 @@ export function AdminOverviewDashboard() {
   }, [loadOverview]);
 
   return (
-    <div className="flex h-dvh flex-col overflow-hidden bg-ice text-sage">
-      <header className="shrink-0 border-b border-mist bg-sage px-6 py-4 text-ice">
+    <div className="flex h-dvh flex-col overflow-hidden bg-background text-foreground">
+      <header className="shrink-0 border-b border-border bg-card px-6 py-4">
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div>
-            <p className="text-xs font-semibold uppercase tracking-[0.3em] text-ice/70">
+            <p className="text-xs font-semibold uppercase tracking-[0.3em] text-muted-foreground">
               Organization Admin
             </p>
-            <h1 className="mt-1 text-2xl font-black tracking-tight">Floor Monitor</h1>
-            <p className="mt-1 text-sm text-ice/80">
+            <h1 className="mt-1 text-2xl font-black tracking-tight text-foreground">
+              Floor Monitor
+            </h1>
+            <p className="mt-1 text-sm text-muted-foreground">
               Real-time agent status for call-center operations
               {lastUpdated ? ` · Updated ${lastUpdated.toLocaleTimeString()}` : ''}
             </p>
           </div>
           <Link
             href="/admin/reports"
-            className="rounded-lg border border-ice/30 bg-ice/10 px-4 py-2 text-sm font-semibold text-ice transition hover:bg-ice/20"
+            className="rounded-lg border border-border bg-background px-4 py-2 text-sm font-semibold text-foreground transition hover:bg-brand-accent/10 hover:text-indigo-600 dark:hover:text-indigo-400"
           >
             Reports &amp; Export
           </Link>
         </div>
       </header>
 
-      <div className="shrink-0 border-b border-mist px-6 py-4">
+      <div className="shrink-0 border-b border-border bg-background px-6 py-4">
         <FloorKpiStrip
           kpis={overview?.kpis ?? null}
           statusBreakdown={overview?.statusBreakdown ?? []}

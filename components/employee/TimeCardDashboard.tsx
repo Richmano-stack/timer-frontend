@@ -1,12 +1,25 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
-import { StatusSidebar } from '@/components/employee/StatusSidebar';
+import { TimerSidebarPanel } from '@/components/employee/TimerSidebarPanel';
 import { TodayStatusLog } from '@/components/employee/TodayStatusLog';
+import { EmployeeShell } from '@/components/layout/EmployeeShell';
 import { Toast, ToastStack } from '@/components/ui/Toast';
+import { authClient } from '@/lib/auth-client';
 import { localTodayDateString, useTimeTracking } from '@/hooks/useTimeTracking';
-import { getEmployeeDisplayStatus } from '@/lib/utils/employee-status';
+import {
+  getEmployeeDisplayStatus,
+  getStatusSinceIso,
+} from '@/lib/utils/employee-status';
 import { formatElapsed, formatShiftStarted } from '@/lib/utils/format-time';
+import { cn } from '@/lib/utils';
+import { ActivityStatusOption } from '@/types/time-tracking';
+
+type ToastState = {
+  message: string;
+  code?: string | null;
+  variant: 'error' | 'success';
+};
 
 function ClockOutConfirmModal({
   open,
@@ -38,13 +51,14 @@ function ClockOutConfirmModal({
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
       <button
         type="button"
-        className="absolute inset-0 bg-sage/40 backdrop-blur-sm"
+        className="absolute inset-0 bg-background/60 backdrop-blur-sm"
         onClick={onClose}
         aria-label="Close dialog"
+        disabled={isSubmitting}
       />
-      <div className="relative w-full max-w-md rounded-lg border border-mist bg-ice p-6 shadow-xl">
-        <h3 className="text-lg font-bold text-sage">Confirm clock out?</h3>
-        <p className="mt-2 text-sm leading-relaxed text-sage/70">
+      <div className="relative w-full max-w-md rounded-lg border border-border bg-card p-6 shadow-xl">
+        <h3 className="text-lg font-bold text-foreground">Confirm clock out?</h3>
+        <p className="mt-2 text-sm leading-relaxed text-muted-foreground">
           This ends your shift and closes any open status. You can clock back in when you return.
         </p>
         <div className="mt-6 flex gap-3">
@@ -52,7 +66,7 @@ function ClockOutConfirmModal({
             type="button"
             onClick={onClose}
             disabled={isSubmitting}
-            className="flex-1 rounded-lg border border-mist px-4 py-2.5 text-sm font-medium text-sage transition hover:bg-mint disabled:opacity-50"
+            className="flex-1 rounded-lg border border-border px-4 py-2.5 text-sm font-medium text-foreground transition hover:bg-background disabled:opacity-50"
           >
             Cancel
           </button>
@@ -60,7 +74,7 @@ function ClockOutConfirmModal({
             type="button"
             onClick={onConfirm}
             disabled={isSubmitting}
-            className="flex-1 rounded-lg bg-mauve px-4 py-2.5 text-sm font-bold text-ice transition hover:bg-mauve/90 disabled:opacity-50"
+            className="flex-1 rounded-lg bg-brand-accent px-4 py-2.5 text-sm font-bold text-white transition hover:opacity-90 disabled:opacity-50"
           >
             {isSubmitting ? 'Clocking out…' : 'Clock Out'}
           </button>
@@ -73,33 +87,49 @@ function ClockOutConfirmModal({
 function StatusStrip({
   session,
   isLoading,
+  date,
 }: {
   session: ReturnType<typeof useTimeTracking>['session'];
   isLoading: boolean;
+  date: string;
 }) {
   const display = getEmployeeDisplayStatus(session);
-  const since = session?.activeActivity?.startTime ?? session?.timeLog.clockIn ?? null;
-
-  const tone = !display.isOnShift
-    ? 'bg-mist text-sage'
-    : display.label === 'Available' || display.isProductive
-      ? 'bg-sage text-ice'
-      : 'bg-mauve text-ice';
+  const since = getStatusSinceIso(session);
+  const isRunning = display.isOnShift;
 
   return (
-    <div className={`border-b border-mist px-6 py-4 ${tone}`}>
+    <div className="border-b border-border bg-card px-6 py-4">
       {isLoading ? (
-        <div className="h-8 w-64 animate-pulse rounded bg-white/20" />
+        <div className="h-8 w-64 animate-pulse rounded bg-border/60" />
       ) : (
         <div className="flex flex-wrap items-center gap-x-6 gap-y-2">
-          <p className="text-sm font-semibold uppercase tracking-widest opacity-80">Live Status</p>
-          <p className="text-xl font-black tracking-tight">{display.label}</p>
-          {since && display.isOnShift && (
+          <p className="text-sm font-semibold uppercase tracking-widest text-muted-foreground">
+            {date}
+          </p>
+          <p className="text-sm font-semibold uppercase tracking-widest text-muted-foreground">
+            Live Status
+          </p>
+          <p
+            className={cn(
+              'text-xl font-black tracking-tight transition-colors duration-300',
+              isRunning ? 'text-foreground' : 'text-slate-500 dark:text-slate-400'
+            )}
+          >
+            {display.label}
+          </p>
+          {since && isRunning && (
             <>
-              <p className="font-mono text-lg tabular-nums">
+              <p
+                className={cn(
+                  'font-mono text-lg tabular-nums transition-colors duration-300',
+                  'timer-running'
+                )}
+              >
                 <LiveElapsed since={since} />
               </p>
-              <p className="text-sm opacity-80">Since {formatShiftStarted(since)}</p>
+              <p className="text-sm text-muted-foreground">
+                Since {formatShiftStarted(since)}
+              </p>
             </>
           )}
         </div>
@@ -137,11 +167,7 @@ export function TimeCardDashboard() {
   } = useTimeTracking();
 
   const [showClockOutModal, setShowClockOutModal] = useState(false);
-  const [toast, setToast] = useState<{
-    message: string;
-    code?: string | null;
-    variant: 'error' | 'success';
-  } | null>(null);
+  const [toast, setToast] = useState<ToastState | null>(null);
 
   const display = getEmployeeDisplayStatus(session);
 
@@ -151,43 +177,72 @@ export function TimeCardDashboard() {
     clearError();
   }, [error, errorCode, clearError]);
 
+  const showSuccess = useCallback((message: string) => {
+    setToast({ message, variant: 'success' });
+  }, []);
+
   const handleClockIn = useCallback(async () => {
-    await clockIn({ clockInIp: null, latitude: null, longitude: null });
-  }, [clockIn]);
+    const ok = await clockIn();
+    if (ok) showSuccess('Clocked in successfully.');
+  }, [clockIn, showSuccess]);
 
   const handleConfirmClockOut = useCallback(async () => {
-    await clockOut();
-    setShowClockOutModal(false);
-  }, [clockOut]);
+    const ok = await clockOut();
+    if (ok) {
+      setShowClockOutModal(false);
+      showSuccess('Clocked out successfully.');
+    }
+  }, [clockOut, showSuccess]);
 
   const handleClockOutClick = useCallback(() => {
     setShowClockOutModal(true);
   }, []);
 
-  return (
-    <div className="flex h-dvh overflow-hidden bg-ice text-sage">
-      <StatusSidebar
-        employeeName={myDay?.employeeName ?? 'Employee'}
-        date={myDay?.date ?? localTodayDateString()}
-        session={session}
-        activityStatuses={myDay?.activityStatuses ?? []}
-        summary={myDay?.summary ?? null}
-        isLoading={isLoading}
-        isSubmitting={isSubmitting}
-        onClockIn={handleClockIn}
-        onClockOut={handleClockOutClick}
-        onSetAvailable={setAvailable}
-        onSetStatus={setStatus}
-      />
+  const handleSetAvailable = useCallback(async () => {
+    const ok = await setAvailable();
+    if (ok) showSuccess('Status set to Available.');
+  }, [setAvailable, showSuccess]);
 
-      <main className="flex min-w-0 flex-1 flex-col">
-        <StatusStrip session={session} isLoading={isLoading} />
-        <TodayStatusLog
-          timeline={myDay?.timeline}
+  const handleSetStatus = useCallback(
+    async (status: ActivityStatusOption) => {
+      const ok = await setStatus(status);
+      if (ok) showSuccess(`Status set to ${status.name}.`);
+    },
+    [setStatus, showSuccess]
+  );
+
+  const handleLogout = useCallback(async () => {
+    await authClient.signOut();
+    window.location.href = '/login';
+  }, []);
+
+  const employeeName = myDay?.employeeName ?? 'Employee';
+  const date = myDay?.date ?? localTodayDateString();
+
+  return (
+    <EmployeeShell
+      onLogout={handleLogout}
+      sidebarPanel={
+        <TimerSidebarPanel
+          employeeName={employeeName}
+          session={session}
+          activityStatuses={myDay?.activityStatuses ?? []}
           isLoading={isLoading}
-          currentLabel={display.label}
+          isSubmitting={isSubmitting}
+          onClockIn={handleClockIn}
+          onClockOut={handleClockOutClick}
+          onSetAvailable={handleSetAvailable}
+          onSetStatus={handleSetStatus}
         />
-      </main>
+      }
+    >
+      <StatusStrip session={session} isLoading={isLoading} date={date} />
+      <TodayStatusLog
+        timeline={myDay?.timeline}
+        isLoading={isLoading}
+        currentLabel={display.label}
+        isRunning={display.isOnShift}
+      />
 
       <ClockOutConfirmModal
         open={showClockOutModal}
@@ -206,6 +261,6 @@ export function TimeCardDashboard() {
           />
         </ToastStack>
       )}
-    </div>
+    </EmployeeShell>
   );
 }

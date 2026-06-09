@@ -6,6 +6,9 @@ import {
 import { ServiceResult } from '@/lib/types/api-response';
 
 const ERROR_STATUS_MAP: Record<TimeTrackingErrorCode, number> = {
+  UNAUTHORIZED: 401,
+  FORBIDDEN: 403,
+  NO_ACTIVE_ORGANIZATION: 403,
   USER_ALREADY_CLOCKED_IN: 409,
   NO_ACTIVE_SESSION_FOUND: 404,
   BREAK_ALREADY_ACTIVE: 409,

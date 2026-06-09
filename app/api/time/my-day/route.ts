@@ -1,4 +1,8 @@
-import { fail, executeServiceRoute } from '@/lib/http/api-handler';
+import { fail } from '@/lib/http/api-handler';
+import {
+  executeAdminRoute,
+  executeAuthenticatedRoute,
+} from '@/lib/http/session-route';
 import { getMyDayService } from '@/lib/services/time-tracking.service';
 import { TimeTrackingErrorCodes } from '@/lib/errors/time-tracking';
 import { myDayQuerySchema } from '@/lib/validators/time-tracking';
@@ -8,9 +12,8 @@ export async function GET(request: Request) {
     const { searchParams } = new URL(request.url);
 
     const parsed = myDayQuerySchema.safeParse({
-      userId: searchParams.get('userId'),
-      companyId: searchParams.get('companyId'),
       date: searchParams.get('date') ?? undefined,
+      userId: searchParams.get('userId') ?? undefined,
     });
 
     if (!parsed.success) {
@@ -20,9 +23,17 @@ export async function GET(request: Request) {
       );
     }
 
-    const { userId, companyId, date } = parsed.data;
+    const { date, userId: targetUserId } = parsed.data;
 
-    return executeServiceRoute(() => getMyDayService(userId, companyId, date));
+    if (targetUserId) {
+      return executeAdminRoute(request, ({ organizationId }) =>
+        getMyDayService(targetUserId, organizationId, date)
+      );
+    }
+
+    return executeAuthenticatedRoute(request, ({ userId, organizationId }) =>
+      getMyDayService(userId, organizationId, date)
+    );
   } catch (error) {
     console.error('[API] Unhandled route error:', error);
     return fail(

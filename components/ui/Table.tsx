@@ -13,8 +13,10 @@ export function TableSectionTitle({
 }) {
   return (
     <div className="mb-3 flex flex-wrap items-baseline justify-between gap-2">
-      <h2 className="text-xs font-semibold uppercase tracking-widest text-sage/70">{title}</h2>
-      {caption && <p className="text-xs text-sage/50">{caption}</p>}
+      <h2 className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">
+        {title}
+      </h2>
+      {caption && <p className="text-xs text-muted-foreground">{caption}</p>}
     </div>
   );
 }
@@ -29,7 +31,7 @@ export function TableShell({
   return (
     <div
       className={cn(
-        'overflow-hidden rounded-lg border border-mist bg-white',
+        'overflow-hidden rounded-lg border border-border bg-card',
         className
       )}
     >
@@ -61,7 +63,7 @@ export function Table({
 
 export function TableHead({ children }: { children: ReactNode }) {
   return (
-    <thead className="bg-sage text-ice">
+    <thead className="border-b border-border bg-background text-foreground">
       <tr>{children}</tr>
     </thead>
   );
@@ -77,7 +79,7 @@ export function TableHeaderCell({
   return (
     <th
       className={cn(
-        'px-4 py-3 text-xs font-semibold uppercase tracking-widest',
+        'px-4 py-3 text-xs font-semibold uppercase tracking-widest text-muted-foreground',
         className
       )}
     >
@@ -100,7 +102,7 @@ export function TableRow({
   return (
     <tr
       className={cn(
-        'border-b border-mist last:border-0 hover:bg-mint/60',
+        'border-b border-border last:border-0 hover:bg-background',
         className
       )}
     >
@@ -119,7 +121,7 @@ export function TableCell({
   colSpan?: number;
 }) {
   return (
-    <td className={cn('px-4 py-3 text-sage', className)} colSpan={colSpan}>
+    <td className={cn('px-4 py-3 text-foreground', className)} colSpan={colSpan}>
       {children}
     </td>
   );
@@ -128,7 +130,7 @@ export function TableCell({
 export function TableEmptyState({ message }: { message: string }) {
   return (
     <TableRow className="hover:bg-transparent">
-      <TableCell colSpan={99} className="py-10 text-center text-sm text-sage/60">
+      <TableCell colSpan={99} className="py-10 text-center text-sm text-muted-foreground">
         {message}
       </TableCell>
     </TableRow>

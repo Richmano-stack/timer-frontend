@@ -24,28 +24,30 @@ export function Toast({
 
   const borderClass =
     variant === 'success'
-      ? 'border-sage/40 ring-sage/10'
-      : 'border-mauve/40 ring-mauve/10';
+      ? 'border-brand-accent/40 ring-brand-accent/10'
+      : 'border-border ring-border/20';
 
-  const iconClass = variant === 'success' ? 'text-sage' : 'text-mauve';
+  const iconClass = variant === 'success' ? 'text-brand-accent' : 'text-muted-foreground';
 
   return (
     <div
       role="alert"
-      className={`pointer-events-auto w-full max-w-sm rounded-lg border bg-ice p-4 shadow-lg ring-1 ${borderClass}`}
+      className={`pointer-events-auto w-full max-w-sm rounded-lg border bg-card p-4 shadow-lg ring-1 ${borderClass}`}
     >
       <div className="flex items-start gap-3">
         <div className={`mt-0.5 text-lg ${iconClass}`}>{variant === 'success' ? '✓' : '!'}</div>
         <div className="min-w-0 flex-1">
           {code && (
-            <p className="mb-1 font-mono text-xs uppercase tracking-wider text-sage/50">{code}</p>
+            <p className="mb-1 font-mono text-xs uppercase tracking-wider text-muted-foreground">
+              {code}
+            </p>
           )}
-          <p className="text-sm leading-relaxed text-sage">{message}</p>
+          <p className="text-sm leading-relaxed text-foreground">{message}</p>
         </div>
         <button
           type="button"
           onClick={onDismiss}
-          className="shrink-0 text-sage/50 transition hover:text-sage"
+          className="shrink-0 text-muted-foreground transition hover:text-foreground"
           aria-label="Dismiss notification"
         >
           ×

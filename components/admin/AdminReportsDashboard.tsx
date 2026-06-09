@@ -25,11 +25,8 @@ import {
 } from '@/lib/utils/admin-metrics';
 import { TimesheetRow, TimesheetsResponse } from '@/types/admin-dashboard';
 
-const DEV_COMPANY_ID =
-  process.env.NEXT_PUBLIC_DEV_COMPANY_ID ?? '00000000-0000-4000-8000-000000000010';
-
 const inputClassName =
-  'rounded-lg border border-mist bg-white px-3 py-2 text-sm text-sage outline-none focus:ring-2 focus:ring-sage/30';
+  'rounded-lg border border-border bg-card px-3 py-2 text-sm text-foreground outline-none focus:ring-2 focus:ring-brand-accent/30';
 
 function TableSkeleton() {
   return (
@@ -51,7 +48,6 @@ export function AdminReportsDashboard() {
 
   const fetchTimesheets = useCallback(async () => {
     const params = new URLSearchParams({
-      companyId: DEV_COMPANY_ID,
       startDate: dateRange.startDate,
       endDate: dateRange.endDate,
     });
@@ -107,7 +103,7 @@ export function AdminReportsDashboard() {
   }, [dateRange, fetchTimesheets, timesheetRows, timesheetsLoaded]);
 
   return (
-    <div className="min-h-screen bg-ice text-sage">
+    <div className="min-h-screen bg-background text-foreground">
       <div className="mx-auto max-w-6xl px-6 py-8">
         <DashboardHeader
           eyebrow="Organization Admin"
@@ -116,7 +112,7 @@ export function AdminReportsDashboard() {
           actions={
             <Link
               href="/admin/overview"
-              className="rounded-lg border border-ice/30 bg-ice/10 px-4 py-2 text-sm font-semibold text-ice transition hover:bg-ice/20"
+              className="rounded-lg border border-border bg-background px-4 py-2 text-sm font-semibold text-foreground transition hover:bg-brand-accent/10 hover:text-indigo-600 dark:hover:text-indigo-400"
             >
               Back to Floor Monitor
             </Link>
@@ -125,9 +121,9 @@ export function AdminReportsDashboard() {
 
         <section>
           <TableSectionTitle title="Timesheets" />
-          <div className="mb-4 flex flex-col gap-4 rounded-lg border border-mist bg-white p-4 sm:flex-row sm:flex-wrap sm:items-end">
+          <div className="mb-4 flex flex-col gap-4 rounded-lg border border-border bg-card p-4 sm:flex-row sm:flex-wrap sm:items-end">
             <div>
-              <label className="mb-1 block text-xs font-semibold uppercase tracking-widest text-sage/60">
+              <label className="mb-1 block text-xs font-semibold uppercase tracking-widest text-muted-foreground">
                 Start Date
               </label>
               <input
@@ -141,7 +137,7 @@ export function AdminReportsDashboard() {
               />
             </div>
             <div>
-              <label className="mb-1 block text-xs font-semibold uppercase tracking-widest text-sage/60">
+              <label className="mb-1 block text-xs font-semibold uppercase tracking-widest text-muted-foreground">
                 End Date
               </label>
               <input
@@ -158,7 +154,7 @@ export function AdminReportsDashboard() {
               type="button"
               onClick={handleLoadTimesheets}
               disabled={timesheetsLoading}
-              className="rounded-lg bg-sage px-5 py-2 text-sm font-semibold text-ice transition hover:bg-sage/90 disabled:opacity-50"
+              className="rounded-lg bg-brand-accent px-5 py-2 text-sm font-semibold text-white transition hover:opacity-90 disabled:opacity-50"
             >
               {timesheetsLoading ? 'Loading…' : 'Load'}
             </button>
@@ -166,7 +162,7 @@ export function AdminReportsDashboard() {
               type="button"
               onClick={handleExport}
               disabled={isExporting}
-              className="rounded-lg border border-mauve bg-mauve/10 px-5 py-2 text-sm font-semibold text-sage transition hover:bg-mauve/20 disabled:opacity-50"
+              className="rounded-lg border border-border bg-background px-5 py-2 text-sm font-semibold text-foreground transition hover:bg-brand-accent/10 disabled:opacity-50"
             >
               {isExporting ? 'Exporting…' : 'Export CSV'}
             </button>

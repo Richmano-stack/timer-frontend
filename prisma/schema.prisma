@@ -1,92 +1,158 @@
-generator client {
-  provider = "prisma-client-js"
-}
-
-datasource db {
-  provider = "postgresql"
-  url      = env("DATABASE_URL")
-}
-
-enum UserRole {
-  SUPER_ADMIN
-  ORG_ADMIN
-  MANAGER
-  EMPLOYEE
-}
-
-model Company {
-  id               String           @id @default(uuid())
-  name             String
-  createdAt        DateTime         @default(now()) @db.Timestamptz(3)
-  updatedAt        DateTime         @updatedAt @db.Timestamptz(3)
-  users            User[]
-  timeLogs         TimeLog[]
-  activityStatuses ActivityStatus[]
-}
-
-model User {
-  id        String   @id @default(uuid())
-  companyId String
-  email     String
-  name      String
-  role      UserRole @default(EMPLOYEE)
-  isActive  Boolean  @default(true)
-  createdAt DateTime @default(now()) @db.Timestamptz(3)
-  updatedAt DateTime @updatedAt @db.Timestamptz(3)
-  company   Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
-  timeLogs  TimeLog[]
-
-  @@unique([companyId, email])
-  @@index([companyId])
-}
-
-model ActivityStatus {
-  id           String        @id @default(uuid())
-  companyId    String
-  name         String
-  isProductive Boolean       @default(false)
-  createdAt    DateTime      @default(now()) @db.Timestamptz(3)
-  updatedAt    DateTime      @updatedAt @db.Timestamptz(3)
-  company      Company       @relation(fields: [companyId], references: [id], onDelete: Cascade)
-  activityLogs ActivityLog[]
-
-  @@unique([companyId, name])
-  @@index([companyId])
-}
-
-model TimeLog {
-  id             String        @id @default(uuid())
-  userId         String
-  companyId      String
-  clockIn        DateTime      @default(now()) @db.Timestamptz(3)
-  clockOut       DateTime?     @db.Timestamptz(3)
-  netWorkMinutes Int?
-  clockInIp      String?
-  clockOutIp     String?
-  latitude       Decimal?      @db.Decimal(10, 8)
-  longitude      Decimal?      @db.Decimal(11, 8)
-  notes          String        @default("")
-  createdAt      DateTime      @default(now()) @db.Timestamptz(3)
-  updatedAt      DateTime      @updatedAt @db.Timestamptz(3)
-  user           User          @relation(fields: [userId], references: [id], onDelete: Cascade)
-  company        Company       @relation(fields: [companyId], references: [id], onDelete: Cascade)
-  activityLogs   ActivityLog[]
-
-  @@index([userId, companyId, clockOut])
-  @@index([companyId, clockIn])
-}
-
-model ActivityLog {
-  id        String         @id @default(uuid())
-  timeLogId String
-  statusId  String
-  startTime DateTime       @default(now()) @db.Timestamptz(3)
-  endTime   DateTime?      @db.Timestamptz(3)
-  createdAt DateTime       @default(now()) @db.Timestamptz(3)
-  updatedAt DateTime       @updatedAt @db.Timestamptz(3)
-  timeLog   TimeLog        @relation(fields: [timeLogId], references: [id], onDelete: Cascade)
-  status    ActivityStatus @relation(fields: [statusId], references: [id], onDelete: Restrict)
-
-  @@index([timeLogId, endTime])
-}
-
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum StatusType {
+  PRODUCTIVE
+  BREAK
+  TRAINING
+  SYSTEM_ISSUE
+}
+
+model User {
+  id            String    @id
+  name          String
+  email         String    @unique
+  emailVerified Boolean   @default(false)
+  image         String?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+  sessions      Session[]
+  accounts      Account[]
+  members       Member[]
+  invitations   Invitation[] @relation("Inviter")
+  timeLogs      TimeLog[]
+
+  @@map("user")
+}
+
+model Session {
+  id                   String   @id
+  expiresAt            DateTime
+  token                String   @unique
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime @updatedAt
+  ipAddress            String?
+  userAgent            String?
+  userId               String
+  activeOrganizationId String?
+  user                 User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("session")
+}
+
+model Account {
+  id                    String    @id
+  accountId             String
+  providerId            String
+  userId                String
+  user                  User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  accessToken           String?
+  refreshToken          String?
+  idToken               String?
+  accessTokenExpiresAt  DateTime?
+  refreshTokenExpiresAt DateTime?
+  scope                 String?
+  password              String?
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+
+  @@index([userId])
+  @@map("account")
+}
+
+model Verification {
+  id         String   @id
+  identifier String
+  value      String
+  expiresAt  DateTime
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@index([identifier])
+  @@map("verification")
+}
+
+model Organization {
+  id               String           @id
+  name             String
+  slug             String           @unique
+  logo             String?
+  metadata         String?
+  createdAt        DateTime         @default(now())
+  updatedAt        DateTime         @updatedAt
+  members          Member[]
+  invitations      Invitation[]
+  activityStatuses ActivityStatus[]
+  timeLogs         TimeLog[]
+
+  @@map("organization")
+}
+
+model Member {
+  id             String       @id
+  organizationId String
+  userId         String
+  role           String       @default("member")
+  createdAt      DateTime     @default(now())
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  user           User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([organizationId, userId])
+  @@index([userId])
+  @@map("member")
+}
+
+model Invitation {
+  id             String       @id
+  organizationId String
+  email          String
+  role           String
+  status         String       @default("pending")
+  expiresAt      DateTime
+  inviterId      String
+  createdAt      DateTime     @default(now())
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  inviter        User         @relation("Inviter", fields: [inviterId], references: [id], onDelete: Cascade)
+
+  @@index([organizationId])
+  @@map("invitation")
+}
+
+model ActivityStatus {
+  id             String       @id @default(uuid())
+  name           String
+  type           StatusType
+  colorCode      String
+  isBillable     Boolean      @default(true)
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  timeLogs       TimeLog[]
+
+  @@unique([organizationId, name])
+  @@index([organizationId])
+  @@map("activity_status")
+}
+
+model TimeLog {
+  id               String         @id @default(uuid())
+  userId           String
+  organizationId   String
+  activityStatusId String
+  startTime        DateTime       @default(now()) @db.Timestamptz(3)
+  endTime          DateTime?      @db.Timestamptz(3)
+  notes            String?
+  user             User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  organization     Organization   @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  activityStatus   ActivityStatus @relation(fields: [activityStatusId], references: [id], onDelete: Restrict)
+
+  @@index([userId, organizationId, endTime])
+  @@index([organizationId, startTime])
+  @@map("time_log")
+}
