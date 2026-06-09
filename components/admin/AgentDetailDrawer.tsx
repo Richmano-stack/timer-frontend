@@ -16,9 +16,6 @@ import { api, ApiError } from '@/lib/api';
 import { localTodayDateString } from '@/hooks/useTimeTracking';
 import { MyDayResponse } from '@/types/time-tracking';
 
-const DEV_COMPANY_ID =
-  process.env.NEXT_PUBLIC_DEV_COMPANY_ID ?? '00000000-0000-4000-8000-000000000010';
-
 function productiveLabel(value: boolean | null): string {
   if (value === null) return '—';
   return value ? 'Yes' : 'No';
@@ -48,7 +45,6 @@ export function AgentDetailDrawer({
 
       try {
         const params = new URLSearchParams({
-          companyId: DEV_COMPANY_ID,
           userId,
           date: localTodayDateString(),
         });
@@ -84,21 +80,21 @@ export function AgentDetailDrawer({
     <div className="fixed inset-0 z-50 flex justify-end">
       <button
         type="button"
-        className="absolute inset-0 bg-sage/30 backdrop-blur-sm"
+        className="absolute inset-0 bg-background/60 backdrop-blur-sm"
         onClick={onClose}
         aria-label="Close drawer"
       />
-      <div className="relative flex h-full w-full max-w-xl flex-col border-l border-mist bg-ice shadow-2xl">
-        <div className="flex items-start justify-between border-b border-mist px-6 py-4">
+      <div className="relative flex h-full w-full max-w-xl flex-col border-l border-border bg-card shadow-2xl">
+        <div className="flex items-start justify-between border-b border-border px-6 py-4">
           <div>
-            <p className="text-xs font-semibold uppercase tracking-widest text-sage/50">
+            <p className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">
               Today&apos;s Status Log
             </p>
-            <h3 className="text-lg font-bold text-sage">
+            <h3 className="text-lg font-bold text-foreground">
               {data?.employeeName ?? 'Agent Details'}
             </h3>
             {data && (
-              <p className="mt-1 text-sm text-sage/60">
+              <p className="mt-1 text-sm text-muted-foreground">
                 {data.date} · On shift {data.summary.gross} · Breaks {data.summary.breaks} · Net{' '}
                 {data.summary.net}h
               </p>
@@ -107,14 +103,14 @@ export function AgentDetailDrawer({
           <button
             type="button"
             onClick={onClose}
-            className="rounded-lg px-2 py-1 text-xl text-mauve hover:bg-mauve/10"
+            className="rounded-lg px-2 py-1 text-xl text-muted-foreground transition hover:bg-background hover:text-foreground"
             aria-label="Close"
           >
             ×
           </button>
         </div>
 
-        <div className="min-h-0 flex-1 overflow-y-auto p-4">
+        <div className="min-h-0 flex-1 overflow-y-auto bg-background p-4">
           {loading && (
             <div className="space-y-3">
               {[0, 1, 2, 3].map((index) => (
@@ -122,7 +118,7 @@ export function AgentDetailDrawer({
               ))}
             </div>
           )}
-          {error && <p className="text-sm text-mauve">{error}</p>}
+          {error && <p className="text-sm text-muted-foreground">{error}</p>}
           {!loading && !error && data && (
             <TableShell>
               <Table>

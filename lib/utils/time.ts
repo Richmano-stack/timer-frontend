@@ -1,76 +1,75 @@
+import { StatusType } from '@prisma/client';
+import { isProductiveType } from '@/lib/utils/status-type';
+
 export function utcNow(): Date {
   return new Date();
 }
 
-/**
- * Server-authoritative net duration in whole minutes (gross elapsed minus breaks).
- * All inputs must originate from persisted DB timestamps — never client payloads.
- */
-export function computeNetWorkMinutes(
-  clockIn: Date,
-  clockOut: Date,
-  activityLogs: { startTime: Date; endTime: Date | null }[]
-): number {
-  const grossMs = Math.max(0, clockOut.getTime() - clockIn.getTime());
-
-  let breakMs = 0;
-  for (const entry of activityLogs) {
-    const breakEnd = entry.endTime ?? clockOut;
-    breakMs += Math.max(0, breakEnd.getTime() - entry.startTime.getTime());
-  }
-
-  const netMs = Math.max(0, grossMs - breakMs);
-  return Math.floor(netMs / (1000 * 60));
-}
-
-export function serializeTimeLog<T extends Record<string, unknown>>(timeLog: T): T {
-  return {
-    ...timeLog,
-    clockIn: timeLog.clockIn instanceof Date ? timeLog.clockIn.toISOString() : timeLog.clockIn,
-    clockOut:
-      timeLog.clockOut instanceof Date
-        ? timeLog.clockOut.toISOString()
-        : timeLog.clockOut ?? null,
-    createdAt:
-      timeLog.createdAt instanceof Date ? timeLog.createdAt.toISOString() : timeLog.createdAt,
-    updatedAt:
-      timeLog.updatedAt instanceof Date ? timeLog.updatedAt.toISOString() : timeLog.updatedAt,
-    latitude: timeLog.latitude != null ? String(timeLog.latitude) : null,
-    longitude: timeLog.longitude != null ? String(timeLog.longitude) : null,
-  };
-}
-
-type ActivityLogWithStatus = Record<string, unknown> & {
-  statusId?: string;
-  status?: {
-    id: string;
+type SegmentWithStatus = {
+  startTime: Date;
+  endTime: Date | null;
+  activityStatus: {
     name: string;
-    isProductive: boolean;
+    type: StatusType;
+    colorCode: string;
+    isBillable: boolean;
   };
 };
 
-export function serializeActivityLog(activityLog: ActivityLogWithStatus) {
-  const {
-    status,
-    statusId: rawStatusId,
-    startTime,
-    endTime,
-    createdAt,
-    updatedAt,
-    ...rest
-  } = activityLog;
-
-  const resolvedStatusId =
-    typeof rawStatusId === 'string' ? rawStatusId : status?.id ?? '';
+export function serializeTimeLogSegment<T extends Record<string, unknown>>(
+  segment: T & SegmentWithStatus
+) {
+  const { activityStatus, startTime, endTime, ...rest } = segment;
+  const startIso = startTime instanceof Date ? startTime.toISOString() : String(startTime);
+  const endIso = endTime instanceof Date ? endTime.toISOString() : endTime ?? null;
 
   return {
     ...rest,
-    statusId: resolvedStatusId,
-    statusName: status?.name ?? '',
-    isProductive: status?.isProductive ?? false,
-    startTime: startTime instanceof Date ? startTime.toISOString() : startTime,
-    endTime: endTime instanceof Date ? endTime.toISOString() : endTime ?? null,
-    createdAt: createdAt instanceof Date ? createdAt.toISOString() : createdAt,
-    updatedAt: updatedAt instanceof Date ? updatedAt.toISOString() : updatedAt,
+    activityStatusId: (rest as { activityStatusId?: string }).activityStatusId ?? '',
+    statusName: activityStatus.name,
+    type: activityStatus.type,
+    colorCode: activityStatus.colorCode,
+    isBillable: activityStatus.isBillable,
+    isProductive: isProductiveType(activityStatus.type),
+    startTime: startIso,
+    endTime: endIso != null ? String(endIso) : null,
+  };
+}
+
+export function segmentDurationMs(startTime: Date, endTime: Date | null, now = utcNow()): number {
+  const end = endTime ?? now;
+  return Math.max(0, end.getTime() - startTime.getTime());
+}
+
+export function computeDaySummaryFromSegments(
+  segments: SegmentWithStatus[],
+  formatHuman: (ms: number) => string,
+  formatHours: (ms: number) => string
+): { gross: string; breaks: string; net: string } {
+  const now = utcNow();
+  let grossMs = 0;
+  let breakMs = 0;
+
+  if (segments.length === 0) {
+    return { gross: '0m', breaks: '0m', net: '0.0h' };
+  }
+
+  const firstStart = segments[0].startTime.getTime();
+  const lastEnd = segments[segments.length - 1].endTime ?? now;
+  grossMs = Math.max(0, lastEnd.getTime() - firstStart);
+
+  for (const segment of segments) {
+    const duration = segmentDurationMs(segment.startTime, segment.endTime, now);
+    if (!isProductiveType(segment.activityStatus.type)) {
+      breakMs += duration;
+    }
+  }
+
+  const netMs = Math.max(0, grossMs - breakMs);
+
+  return {
+    gross: formatHuman(grossMs),
+    breaks: formatHuman(breakMs),
+    net: formatHours(netMs),
   };
 }

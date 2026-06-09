@@ -32,9 +32,9 @@ export function formatShiftStarted(isoStart: string): string {
 }
 
 export function getTimeCardMode(
-  session: { timeLog: unknown; activeActivity: unknown | null } | null
+  session: { activeSegment: { isProductive: boolean } | null } | null
 ): 'clocked_out' | 'working' | 'on_break' {
-  if (!session) return 'clocked_out';
-  if (session.activeActivity) return 'on_break';
+  if (!session?.activeSegment) return 'clocked_out';
+  if (!session.activeSegment.isProductive) return 'on_break';
   return 'working';
 }

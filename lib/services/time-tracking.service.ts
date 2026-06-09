@@ -1,40 +1,54 @@
-import { Prisma } from '@prisma/client';
+import { StatusType } from '@prisma/client';
 import { prisma } from '@/lib/db/prisma';
 import { fail, TimeTrackingErrorCodes } from '@/lib/errors/time-tracking';
-import { resolveActivityStatus } from '@/lib/security/activity-status';
-import { resolveTenantContext } from '@/lib/security/tenant-context';
+import {
+  resolveActivityStatus,
+  resolveAvailableStatus,
+} from '@/lib/security/activity-status';
+import { resolveOrganizationContext } from '@/lib/security/organization-context';
 import { ServiceResult } from '@/lib/types/api-response';
 import {
-  computeNetWorkMinutes,
-  serializeActivityLog,
-  serializeTimeLog,
-  utcNow,
-} from '@/lib/utils/time';
-import {
-  computeSessionMetrics,
   formatDurationHuman,
   formatDurationHours,
-  formatNetWorkMinutes,
   formatTimeLocal,
 } from '@/lib/utils/admin-metrics';
+import { AVAILABLE_STATUS_NAME, isProductiveType } from '@/lib/utils/status-type';
+import {
+  computeDaySummaryFromSegments,
+  segmentDurationMs,
+  serializeTimeLogSegment,
+  utcNow,
+} from '@/lib/utils/time';
 
-export interface ClockInMetadata {
-  clockInIp?: string | null;
-  latitude?: number | null;
-  longitude?: number | null;
-  notes?: string;
+const segmentInclude = {
+  activityStatus: {
+    select: {
+      id: true,
+      name: true,
+      type: true,
+      colorCode: true,
+      isBillable: true,
+    },
+  },
+} as const;
+
+export interface TimeLogSegment {
+  id: string;
+  userId: string;
+  organizationId: string;
+  activityStatusId: string;
+  statusName: string;
+  type: StatusType;
+  colorCode: string;
+  isBillable: boolean;
+  isProductive: boolean;
+  startTime: string;
+  endTime: string | null;
+  notes: string | null;
 }
-
-export interface ClockOutMetadata {
-  clockOutIp?: string | null;
-}
-
-type SerializedTimeLog = ReturnType<typeof serializeTimeLog>;
-type SerializedActivityLog = ReturnType<typeof serializeActivityLog>;
 
 export interface ActiveSession {
-  timeLog: SerializedTimeLog;
-  activeActivity: SerializedActivityLog | null;
+  activeSegment: TimeLogSegment | null;
 }
 
 export interface MyDayShiftRow {
@@ -81,22 +95,22 @@ export interface MyDayData {
   employeeName: string;
   date: string;
   activeSession: ActiveSession | null;
-  activityStatuses: { id: string; name: string; isProductive: boolean }[];
+  activityStatuses: {
+    id: string;
+    name: string;
+    type: StatusType;
+    colorCode: string;
+    isBillable: boolean;
+    isProductive: boolean;
+  }[];
   shifts: MyDayShiftRow[];
   activities: MyDayActivityRow[];
   timeline: MyDayTimelineEvent[];
   summary: MyDaySummary;
 }
 
-function isoField(value: unknown): string {
-  if (value instanceof Date) return value.toISOString();
-  if (typeof value === 'string') return value;
-  return String(value);
-}
-
-function isoFieldOrNull(value: unknown): string | null {
-  if (value == null) return null;
-  return isoField(value);
+function isoField(value: Date): string {
+  return value.toISOString();
 }
 
 function activityDuration(startIso: string, endIso: string | null): string {
@@ -112,84 +126,66 @@ function resolveDateRange(date: string): { rangeStart: Date; rangeEnd: Date } {
   };
 }
 
-/** Open shifts can start on a prior calendar day; always include them in day views. */
-function mergeOpenShiftIntoDayLogs<T extends { id: string }>(
-  dayLogs: T[],
-  openShift: T | null
-): T[] {
-  if (!openShift) return dayLogs;
-  if (dayLogs.some((log) => log.id === openShift.id)) return dayLogs;
-  return [openShift, ...dayLogs];
+async function findOpenSegment(userId: string, organizationId: string) {
+  return prisma.timeLog.findFirst({
+    where: { userId, organizationId, endTime: null },
+    include: segmentInclude,
+    orderBy: { startTime: 'desc' },
+  });
 }
 
-const activityLogInclude = {
-  status: {
-    select: {
-      id: true,
-      name: true,
-      isProductive: true,
-    },
-  },
-} as const;
-
-function toDecimal(value: number | null | undefined): Prisma.Decimal | null | undefined {
-  if (value === undefined) return undefined;
-  if (value === null) return null;
-  return new Prisma.Decimal(value);
+function toSegment(
+  segment: Awaited<ReturnType<typeof findOpenSegment>>
+): TimeLogSegment | null {
+  if (!segment) return null;
+  return serializeTimeLogSegment(segment) as TimeLogSegment;
 }
 
 export async function clockInService(
   userId: string,
-  companyId: string,
-  metadata: ClockInMetadata = {}
-): Promise<ServiceResult<{ timeLog: SerializedTimeLog }>> {
-  const tenantResult = await resolveTenantContext(userId, companyId);
+  organizationId: string,
+  notes?: string
+): Promise<ServiceResult<{ segment: TimeLogSegment }>> {
+  const tenantResult = await resolveOrganizationContext(userId, organizationId);
   if (!tenantResult.success) return tenantResult;
 
   const tenant = tenantResult.data;
+  const openSegment = await findOpenSegment(tenant.userId, tenant.organizationId);
 
-  const activeLog = await prisma.timeLog.findFirst({
-    where: { userId: tenant.userId, companyId: tenant.companyId, clockOut: null },
-  });
-
-  if (activeLog) {
+  if (openSegment) {
     return fail(
       TimeTrackingErrorCodes.USER_ALREADY_CLOCKED_IN,
       'User already has an active clock-in session.'
     );
   }
 
-  const now = utcNow();
-  const timeLog = await prisma.timeLog.create({
+  const availableResult = await resolveAvailableStatus(tenant.organizationId);
+  if (!availableResult.success) return availableResult;
+
+  const segment = await prisma.timeLog.create({
     data: {
       userId: tenant.userId,
-      companyId: tenant.companyId,
-      clockIn: now,
-      clockInIp: metadata.clockInIp ?? null,
-      latitude: toDecimal(metadata.latitude),
-      longitude: toDecimal(metadata.longitude),
-      notes: metadata.notes ?? '',
+      organizationId: tenant.organizationId,
+      activityStatusId: availableResult.data.id,
+      notes: notes ?? null,
     },
+    include: segmentInclude,
   });
 
-  return { success: true, data: { timeLog: serializeTimeLog(timeLog) } };
+  return { success: true, data: { segment: toSegment(segment)! } };
 }
 
 export async function clockOutService(
   userId: string,
-  companyId: string,
-  metadata: ClockOutMetadata = {}
-): Promise<ServiceResult<{ timeLog: SerializedTimeLog }>> {
-  const tenantResult = await resolveTenantContext(userId, companyId);
+  organizationId: string
+): Promise<ServiceResult<{ segment: TimeLogSegment }>> {
+  const tenantResult = await resolveOrganizationContext(userId, organizationId);
   if (!tenantResult.success) return tenantResult;
 
   const tenant = tenantResult.data;
+  const openSegment = await findOpenSegment(tenant.userId, tenant.organizationId);
 
-  const activeLog = await prisma.timeLog.findFirst({
-    where: { userId: tenant.userId, companyId: tenant.companyId, clockOut: null },
-  });
-
-  if (!activeLog) {
+  if (!openSegment) {
     return fail(
       TimeTrackingErrorCodes.NO_ACTIVE_SESSION_FOUND,
       'No active clock-in session found for this user.'
@@ -197,194 +193,120 @@ export async function clockOutService(
   }
 
   const now = utcNow();
-
-  const timeLog = await prisma.$transaction(async (tx) => {
-    await tx.activityLog.updateMany({
-      where: { timeLogId: activeLog.id, endTime: null },
-      data: { endTime: now },
-    });
-
-    const activityLogs = await tx.activityLog.findMany({
-      where: { timeLogId: activeLog.id },
-      select: { startTime: true, endTime: true },
-    });
-
-    const netWorkMinutes = computeNetWorkMinutes(activeLog.clockIn, now, activityLogs);
-
-    return tx.timeLog.update({
-      where: { id: activeLog.id },
-      data: {
-        clockOut: now,
-        clockOutIp: metadata.clockOutIp ?? null,
-        netWorkMinutes,
-      },
-    });
+  const closed = await prisma.timeLog.update({
+    where: { id: openSegment.id },
+    data: { endTime: now },
+    include: segmentInclude,
   });
 
-  return { success: true, data: { timeLog: serializeTimeLog(timeLog) } };
+  return { success: true, data: { segment: toSegment(closed)! } };
 }
 
 export async function setStatusService(
   userId: string,
-  companyId: string,
+  organizationId: string,
   statusId?: string,
   statusName?: string
-): Promise<ServiceResult<{ activityLog: SerializedActivityLog | null }>> {
-  const tenantResult = await resolveTenantContext(userId, companyId);
+): Promise<ServiceResult<{ segment: TimeLogSegment | null }>> {
+  const tenantResult = await resolveOrganizationContext(userId, organizationId);
   if (!tenantResult.success) return tenantResult;
 
   const tenant = tenantResult.data;
+  const openSegment = await findOpenSegment(tenant.userId, tenant.organizationId);
 
-  const activeLog = await prisma.timeLog.findFirst({
-    where: { userId: tenant.userId, companyId: tenant.companyId, clockOut: null },
-    include: {
-      activityLogs: {
-        where: { endTime: null },
-        take: 1,
-        include: activityLogInclude,
-      },
-    },
-  });
-
-  if (!activeLog) {
+  if (!openSegment) {
     return fail(
       TimeTrackingErrorCodes.NO_ACTIVE_SESSION_FOUND,
       'No active clock-in session found for this user.'
     );
   }
 
-  const openActivity = activeLog.activityLogs[0] ?? null;
   const now = utcNow();
 
+  let targetStatus;
   if (!statusId && !statusName) {
-    if (!openActivity) {
-      return { success: true, data: { activityLog: null } };
-    }
+    const availableResult = await resolveAvailableStatus(tenant.organizationId);
+    if (!availableResult.success) return availableResult;
+    targetStatus = availableResult.data;
+  } else {
+    const statusResult = await resolveActivityStatus(
+      tenant.organizationId,
+      statusId,
+      statusName
+    );
+    if (!statusResult.success) return statusResult;
+    targetStatus = statusResult.data;
+  }
 
-    await prisma.activityLog.update({
-      where: { id: openActivity.id },
+  if (openSegment.activityStatusId === targetStatus.id) {
+    return { success: true, data: { segment: toSegment(openSegment) } };
+  }
+
+  const newSegment = await prisma.$transaction(async (tx) => {
+    await tx.timeLog.update({
+      where: { id: openSegment.id },
       data: { endTime: now },
     });
 
-    return { success: true, data: { activityLog: null } };
-  }
-
-  const statusResult = await resolveActivityStatus(tenant.companyId, statusId, statusName);
-  if (!statusResult.success) return statusResult;
-
-  const status = statusResult.data;
-
-  if (openActivity?.statusId === status.id) {
-    return {
-      success: true,
-      data: { activityLog: serializeActivityLog(openActivity) },
-    };
-  }
-
-  if (openActivity) {
-    await prisma.activityLog.update({
-      where: { id: openActivity.id },
-      data: { endTime: now },
+    return tx.timeLog.create({
+      data: {
+        userId: tenant.userId,
+        organizationId: tenant.organizationId,
+        activityStatusId: targetStatus.id,
+      },
+      include: segmentInclude,
     });
-  }
-
-  const activityLog = await prisma.activityLog.create({
-    data: {
-      timeLogId: activeLog.id,
-      statusId: status.id,
-      startTime: now,
-    },
-    include: activityLogInclude,
   });
 
-  return { success: true, data: { activityLog: serializeActivityLog(activityLog) } };
+  return { success: true, data: { segment: toSegment(newSegment) } };
 }
 
-function computeDaySummary(
-  logs: {
-    clockIn: Date;
-    clockOut: Date | null;
-    activityLogs: {
-      startTime: Date;
-      endTime: Date | null;
-      status: { isProductive: boolean };
-    }[];
-  }[]
-): MyDaySummary {
-  let grossMs = 0;
-  let breakMs = 0;
+type TimelineSegment = Awaited<
+  ReturnType<
+    typeof prisma.timeLog.findMany<{
+      include: typeof segmentInclude;
+    }>
+  >
+>[number];
 
-  for (const log of logs) {
-    const clockIn = log.clockIn.getTime();
-    const clockOut = log.clockOut ? log.clockOut.getTime() : Date.now();
-    grossMs += Math.max(0, clockOut - clockIn);
+function buildTimeline(segments: TimelineSegment[], hasOpenSegment: boolean): MyDayTimelineEvent[] {
+  if (segments.length === 0) return [];
 
-    for (const entry of log.activityLogs) {
-      const start = entry.startTime.getTime();
-      const end = entry.endTime ? entry.endTime.getTime() : Date.now();
-      const durationMs = Math.max(0, end - start);
-      if (!entry.status.isProductive) {
-        breakMs += durationMs;
-      }
-    }
+  const events: MyDayTimelineEvent[] = [];
+  const first = segments[0];
+  const firstStart = isoField(first.startTime);
+
+  events.push({
+    id: `${first.id}-start`,
+    time: firstStart,
+    timeFormatted: formatTimeLocal(firstStart),
+    label: 'Shift started',
+    duration: '—',
+    isProductive: null,
+    kind: 'shift_start',
+  });
+
+  for (const segment of segments) {
+    const serialized = serializeTimeLogSegment(segment);
+    events.push({
+      id: segment.id,
+      time: serialized.startTime,
+      timeFormatted: formatTimeLocal(serialized.startTime),
+      label: serialized.statusName,
+      duration: activityDuration(serialized.startTime, serialized.endTime),
+      isProductive: serialized.isProductive,
+      kind: 'status',
+    });
   }
 
-  const netMs = Math.max(0, grossMs - breakMs);
-
-  return {
-    gross: formatDurationHuman(grossMs),
-    breaks: formatDurationHuman(breakMs),
-    net: formatDurationHours(netMs),
-  };
-}
-
-function buildMyDayTimeline(
-  logs: {
-    id: string;
-    clockIn: Date;
-    clockOut: Date | null;
-    activityLogs: {
-      id: string;
-      startTime: Date;
-      endTime: Date | null;
-      status: { name: string; isProductive: boolean };
-    }[];
-  }[]
-): MyDayTimelineEvent[] {
-  const events: MyDayTimelineEvent[] = [];
-
-  for (const log of [...logs].reverse()) {
-    const clockInIso = isoField(log.clockIn);
-    events.push({
-      id: `${log.id}-start`,
-      time: clockInIso,
-      timeFormatted: formatTimeLocal(clockInIso),
-      label: 'Shift started',
-      duration: '—',
-      isProductive: null,
-      kind: 'shift_start',
-    });
-
-    for (const entry of log.activityLogs) {
-      const startTime = isoField(entry.startTime);
-      const endTime = isoFieldOrNull(entry.endTime);
+  if (!hasOpenSegment && segments.length > 0) {
+    const last = segments[segments.length - 1];
+    if (last.endTime) {
+      const endIso = isoField(last.endTime);
       events.push({
-        id: entry.id,
-        time: startTime,
-        timeFormatted: formatTimeLocal(startTime),
-        label: entry.status.name,
-        duration: activityDuration(startTime, endTime),
-        isProductive: entry.status.isProductive,
-        kind: 'status',
-      });
-    }
-
-    if (log.clockOut) {
-      const clockOutIso = isoField(log.clockOut);
-      events.push({
-        id: `${log.id}-end`,
-        time: clockOutIso,
-        timeFormatted: formatTimeLocal(clockOutIso),
+        id: `${last.id}-end`,
+        time: endIso,
+        timeFormatted: formatTimeLocal(endIso),
         label: 'Shift ended',
         duration: '—',
         isProductive: null,
@@ -393,124 +315,108 @@ function buildMyDayTimeline(
     }
   }
 
-  return events.sort(
-    (left, right) => new Date(left.time).getTime() - new Date(right.time).getTime()
-  );
+  return events;
 }
 
 export async function getMyDayService(
   userId: string,
-  companyId: string,
+  organizationId: string,
   date?: string
 ): Promise<ServiceResult<MyDayData>> {
-  const tenantResult = await resolveTenantContext(userId, companyId);
+  const tenantResult = await resolveOrganizationContext(userId, organizationId);
   if (!tenantResult.success) return tenantResult;
 
   const tenant = tenantResult.data;
   const resolvedDate = date ?? utcNow().toISOString().slice(0, 10);
   const { rangeStart, rangeEnd } = resolveDateRange(resolvedDate);
 
-  const [user, activityStatuses, logs, activeTimeLog] = await Promise.all([
+  const [user, activityStatuses, daySegments, openSegment] = await Promise.all([
     prisma.user.findFirst({
-      where: { id: tenant.userId, companyId: tenant.companyId },
+      where: { id: tenant.userId },
       select: { name: true },
     }),
     prisma.activityStatus.findMany({
-      where: { companyId: tenant.companyId },
-      select: { id: true, name: true, isProductive: true },
+      where: { organizationId: tenant.organizationId },
       orderBy: { name: 'asc' },
     }),
     prisma.timeLog.findMany({
       where: {
         userId: tenant.userId,
-        companyId: tenant.companyId,
-        clockIn: { gte: rangeStart, lte: rangeEnd },
+        organizationId: tenant.organizationId,
+        startTime: { gte: rangeStart, lte: rangeEnd },
       },
-      include: {
-        activityLogs: {
-          include: activityLogInclude,
-          orderBy: { startTime: 'asc' },
-        },
-      },
-      orderBy: { clockIn: 'desc' },
+      include: segmentInclude,
+      orderBy: { startTime: 'asc' },
     }),
-    prisma.timeLog.findFirst({
-      where: { userId: tenant.userId, companyId: tenant.companyId, clockOut: null },
-      include: {
-        activityLogs: {
-          include: activityLogInclude,
-          orderBy: { startTime: 'asc' },
-        },
-      },
-    }),
+    findOpenSegment(tenant.userId, tenant.organizationId),
   ]);
 
   if (!user) {
-    return fail(TimeTrackingErrorCodes.USER_NOT_IN_COMPANY, 'Employee not found in this company.');
+    return fail(TimeTrackingErrorCodes.USER_NOT_IN_COMPANY, 'Employee not found.');
   }
 
-  let activeSession: ActiveSession | null = null;
-  if (activeTimeLog) {
-    const { activityLogs, ...timeLogData } = activeTimeLog;
-    const activeActivity =
-      [...activityLogs].reverse().find((entry) => entry.endTime === null) ?? null;
-    activeSession = {
-      timeLog: serializeTimeLog(timeLogData),
-      activeActivity: activeActivity ? serializeActivityLog(activeActivity) : null,
-    };
+  let effectiveSegments = [...daySegments];
+  if (openSegment && !effectiveSegments.some((s) => s.id === openSegment.id)) {
+    effectiveSegments = [openSegment, ...effectiveSegments];
   }
 
-  const effectiveLogs = mergeOpenShiftIntoDayLogs(logs, activeTimeLog);
+  const activeSession: ActiveSession | null = openSegment
+    ? { activeSegment: toSegment(openSegment) }
+    : null;
 
-  const shifts: MyDayShiftRow[] = effectiveLogs.map((log) => {
-    const serialized = serializeTimeLog(log);
-    const activities = log.activityLogs.map((entry) => serializeActivityLog(entry));
-    const clockInIso = isoField(serialized.clockIn);
-    const clockOutIso = isoFieldOrNull(serialized.clockOut);
-    const metrics = computeSessionMetrics(
-      clockInIso,
-      clockOutIso,
-      activities as { startTime: string; endTime: string | null }[]
-    );
+  const firstStart = effectiveSegments[0]?.startTime;
+  const lastSegment = effectiveSegments[effectiveSegments.length - 1];
+  const shiftId = effectiveSegments[0]?.id ?? 'day';
 
-    const netWorkHours =
-      log.netWorkMinutes != null
-        ? formatNetWorkMinutes(log.netWorkMinutes)
-        : log.clockOut
-          ? formatDurationHours(metrics.netMs)
-          : '—';
+  const breakMs = effectiveSegments.reduce((total, segment) => {
+    if (isProductiveType(segment.activityStatus.type)) return total;
+    return total + segmentDurationMs(segment.startTime, segment.endTime);
+  }, 0);
 
+  const grossMs =
+    effectiveSegments.length > 0 && firstStart
+      ? segmentDurationMs(
+          firstStart,
+          lastSegment?.endTime ?? null,
+          openSegment ? utcNow() : utcNow()
+        )
+      : 0;
+
+  const shifts: MyDayShiftRow[] =
+    effectiveSegments.length > 0 && firstStart
+      ? [
+          {
+            timeLogId: shiftId,
+            clockIn: isoField(firstStart),
+            clockOut: lastSegment?.endTime ? isoField(lastSegment.endTime) : null,
+            clockInFormatted: formatTimeLocal(isoField(firstStart)),
+            clockOutFormatted: lastSegment?.endTime
+              ? formatTimeLocal(isoField(lastSegment.endTime))
+              : 'Active',
+            status: openSegment ? 'active' : 'closed',
+            breakDeductions: formatDurationHuman(breakMs),
+            netWorkHours: formatDurationHours(Math.max(0, grossMs - breakMs)),
+            notes: effectiveSegments.map((s) => s.notes).filter(Boolean).join('; ') || '',
+          },
+        ]
+      : [];
+
+  const dayStartFormatted =
+    effectiveSegments.length > 0 ? formatTimeLocal(isoField(effectiveSegments[0].startTime)) : '—';
+
+  const activities: MyDayActivityRow[] = effectiveSegments.map((segment) => {
+    const serialized = serializeTimeLogSegment(segment);
     return {
-      timeLogId: log.id,
-      clockIn: clockInIso,
-      clockOut: clockOutIso,
-      clockInFormatted: formatTimeLocal(clockInIso),
-      clockOutFormatted: clockOutIso ? formatTimeLocal(clockOutIso) : 'Active',
-      status: log.clockOut ? 'closed' : 'active',
-      breakDeductions: formatDurationHuman(metrics.breakMs),
-      netWorkHours,
-      notes: String(serialized.notes),
+      id: segment.id,
+      timeLogId: shiftId,
+      shiftClockInFormatted: dayStartFormatted,
+      statusName: serialized.statusName,
+      startTime: serialized.startTime,
+      endTime: serialized.endTime,
+      startFormatted: formatTimeLocal(serialized.startTime),
+      endFormatted: serialized.endTime ? formatTimeLocal(serialized.endTime) : 'Active',
+      duration: activityDuration(serialized.startTime, serialized.endTime),
     };
-  });
-
-  const activities: MyDayActivityRow[] = effectiveLogs.flatMap((log) => {
-    const shiftClockInFormatted = formatTimeLocal(isoField(serializeTimeLog(log).clockIn));
-    return log.activityLogs.map((entry) => {
-      const serialized = serializeActivityLog(entry);
-      const startTime = isoField(serialized.startTime);
-      const endTime = isoFieldOrNull(serialized.endTime);
-      return {
-        id: entry.id,
-        timeLogId: log.id,
-        shiftClockInFormatted,
-        statusName: String(serialized.statusName),
-        startTime,
-        endTime,
-        startFormatted: formatTimeLocal(startTime),
-        endFormatted: endTime ? formatTimeLocal(endTime) : 'Active',
-        duration: activityDuration(startTime, endTime),
-      };
-    });
   });
 
   return {
@@ -519,11 +425,22 @@ export async function getMyDayService(
       employeeName: user.name,
       date: resolvedDate,
       activeSession,
-      activityStatuses,
+      activityStatuses: activityStatuses.map((status) => ({
+        id: status.id,
+        name: status.name,
+        type: status.type,
+        colorCode: status.colorCode,
+        isBillable: status.isBillable,
+        isProductive: isProductiveType(status.type),
+      })),
       shifts,
       activities,
-      timeline: buildMyDayTimeline(effectiveLogs),
-      summary: computeDaySummary(effectiveLogs),
+      timeline: buildTimeline(effectiveSegments, Boolean(openSegment)),
+      summary: computeDaySummaryFromSegments(
+        effectiveSegments,
+        formatDurationHuman,
+        formatDurationHours
+      ),
     },
   };
 }

@@ -12,6 +12,7 @@ import {
   TableRow,
   TableShell,
 } from '@/components/ui/Table';
+import { cn } from '@/lib/utils';
 
 function productiveLabel(value: boolean | null): string {
   if (value === null) return '—';
@@ -19,8 +20,8 @@ function productiveLabel(value: boolean | null): string {
 }
 
 function rowClass(kind: MyDayTimelineEvent['kind'], isProductive: boolean | null): string {
-  if (kind === 'shift_start' || kind === 'shift_end') return 'text-sage/80';
-  if (isProductive === false) return 'bg-mauve/5';
+  if (kind === 'shift_start' || kind === 'shift_end') return 'text-muted-foreground';
+  if (isProductive === false) return 'bg-background';
   return '';
 }
 
@@ -28,24 +29,33 @@ export function TodayStatusLog({
   timeline,
   isLoading,
   currentLabel,
+  isRunning,
 }: {
   timeline: MyDayTimelineEvent[] | undefined;
   isLoading: boolean;
   currentLabel: string;
+  isRunning: boolean;
 }) {
   return (
-    <div className="flex min-h-0 flex-1 flex-col">
-      <div className="border-b border-mist px-6 py-4">
+    <div className="flex min-h-0 flex-1 flex-col bg-background">
+      <div className="border-b border-border bg-card px-6 py-4">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
-            <p className="text-xs font-semibold uppercase tracking-widest text-sage/50">
+            <p className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">
               Shift Status Log
             </p>
-            <p className="mt-1 text-sm text-sage/70">
+            <p className="mt-1 text-sm text-muted-foreground">
               Full history for the current shift, including status changes since clock-in.
             </p>
           </div>
-          <p className="rounded-full bg-mint px-3 py-1 text-xs font-semibold text-sage">
+          <p
+            className={cn(
+              'rounded-full border px-3 py-1 text-xs font-semibold transition-colors duration-300',
+              isRunning
+                ? 'border-brand-accent/30 bg-brand-accent/10 text-indigo-600 dark:text-indigo-400'
+                : 'border-border bg-background text-slate-500 dark:text-slate-400'
+            )}
+          >
             Now: {currentLabel}
           </p>
         </div>

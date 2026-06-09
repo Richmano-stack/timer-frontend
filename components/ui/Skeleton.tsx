@@ -5,5 +5,5 @@ interface SkeletonProps {
 }
 
 export const Skeleton: React.FC<SkeletonProps> = ({ className = '' }) => {
-  return <div className={`animate-pulse rounded bg-mist ${className}`} />;
+  return <div className={`animate-pulse rounded bg-border/60 ${className}`} />;
 };

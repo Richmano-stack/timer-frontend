@@ -4,23 +4,23 @@ import { ServiceResult } from '@/lib/types/api-response';
 import {
   formatDurationHuman,
   formatDurationHours,
-  formatNetWorkMinutes,
   formatTimeLocal,
 } from '@/lib/utils/admin-metrics';
-import { serializeTimeLog, utcNow } from '@/lib/utils/time';
+import { AVAILABLE_STATUS_NAME, isBreakType, isProductiveType } from '@/lib/utils/status-type';
+import { segmentDurationMs, utcNow } from '@/lib/utils/time';
 
 const TWELVE_HOURS_MS = 12 * 60 * 60 * 1000;
 const THIRTY_MINUTES_MS = 30 * 60 * 1000;
 
-function isoField(value: unknown): string {
-  if (value instanceof Date) return value.toISOString();
-  if (typeof value === 'string') return value;
-  return String(value);
-}
+const segmentInclude = {
+  activityStatus: {
+    select: { name: true, type: true, colorCode: true },
+  },
+  user: { select: { id: true, name: true } },
+} as const;
 
-function isoFieldOrNull(value: unknown): string | null {
-  if (value == null) return null;
-  return isoField(value);
+function isoField(value: Date): string {
+  return value.toISOString();
 }
 
 export interface AdminKpis {
@@ -79,107 +79,89 @@ export interface TimesheetRow {
   netWorkHours: string;
 }
 
-function computeNonProductiveMs(
-  activityLogs: {
-    startTime: Date;
-    endTime: Date | null;
-    status: { isProductive: boolean };
-  }[],
-  nowMs: number
-): number {
-  let total = 0;
-
-  for (const entry of activityLogs) {
-    if (entry.status.isProductive) continue;
-    const start = entry.startTime.getTime();
-    const end = entry.endTime ? entry.endTime.getTime() : nowMs;
-    total += Math.max(0, end - start);
-  }
-
-  return total;
-}
-
 export async function getAdminOverviewService(
-  companyId: string
+  organizationId: string
 ): Promise<ServiceResult<AdminOverviewData>> {
-  const company = await prisma.company.findUnique({ where: { id: companyId } });
-  if (!company) {
-    return fail(TimeTrackingErrorCodes.USER_NOT_IN_COMPANY, 'Company not found.');
+  const organization = await prisma.organization.findUnique({ where: { id: organizationId } });
+  if (!organization) {
+    return fail(TimeTrackingErrorCodes.USER_NOT_IN_COMPANY, 'Organization not found.');
   }
 
   const now = utcNow();
   const nowMs = now.getTime();
+  const todayStart = new Date(now.toISOString().slice(0, 10) + 'T00:00:00.000Z');
 
-  const [totalRegistered, activeUsers, activeLogs] = await Promise.all([
-    prisma.user.count({ where: { companyId, isActive: true } }),
-    prisma.user.findMany({
-      where: { companyId, isActive: true },
-      select: { id: true, name: true },
-      orderBy: { name: 'asc' },
+  const [members, openSegments, todaySegments] = await Promise.all([
+    prisma.member.findMany({
+      where: { organizationId },
+      include: { user: { select: { id: true, name: true } } },
+      orderBy: { user: { name: 'asc' } },
     }),
     prisma.timeLog.findMany({
-      where: { companyId, clockOut: null },
-      include: {
-        user: { select: { id: true, name: true } },
-        activityLogs: {
-          include: { status: { select: { name: true, isProductive: true } } },
-          orderBy: { startTime: 'asc' },
-        },
+      where: { organizationId, endTime: null },
+      include: segmentInclude,
+      orderBy: { startTime: 'asc' },
+    }),
+    prisma.timeLog.findMany({
+      where: {
+        organizationId,
+        startTime: { gte: todayStart },
       },
-      orderBy: { clockIn: 'asc' },
+      include: {
+        activityStatus: { select: { type: true } },
+      },
     }),
   ]);
 
-  const activeLogByUserId = new Map(activeLogs.map((log) => [log.userId, log]));
+  const openByUserId = new Map(openSegments.map((segment) => [segment.userId, segment]));
 
-  const floorAgents: FloorAgentRow[] = activeUsers.map((user) => {
-    const log = activeLogByUserId.get(user.id);
+  const breakTodayByUser = new Map<string, number>();
+  for (const segment of todaySegments) {
+    if (!isBreakType(segment.activityStatus.type)) continue;
+    const current = breakTodayByUser.get(segment.userId) ?? 0;
+    breakTodayByUser.set(
+      segment.userId,
+      current + segmentDurationMs(segment.startTime, segment.endTime, now)
+    );
+  }
 
-    if (!log) {
+  const floorAgents: FloorAgentRow[] = await Promise.all(
+    members.map(async (member) => {
+      const open = openByUserId.get(member.userId);
+
+      if (!open) {
+        return {
+          userId: member.user.id,
+          employeeName: member.user.name,
+          timeLogId: null,
+          clockIn: null,
+          displayStatus: 'Clocked Out',
+          isProductive: null,
+          statusSince: null,
+          breakToday: formatDurationHuman(breakTodayByUser.get(member.userId) ?? 0),
+          isOnShift: false,
+        };
+      }
+
+      const shiftStart = await awaitFirstSegmentStart(
+        organizationId,
+        member.userId,
+        open.startTime
+      );
+
       return {
-        userId: user.id,
-        employeeName: user.name,
-        timeLogId: null,
-        clockIn: null,
-        displayStatus: 'Clocked Out',
-        isProductive: null,
-        statusSince: null,
-        breakToday: '—',
-        isOnShift: false,
-      };
-    }
-
-    const openActivity =
-      [...log.activityLogs].reverse().find((entry) => entry.endTime === null) ?? null;
-    const clockInIso = isoField(log.clockIn);
-    const breakTodayMs = computeNonProductiveMs(log.activityLogs, nowMs);
-
-    if (!openActivity) {
-      return {
-        userId: user.id,
-        employeeName: user.name,
-        timeLogId: log.id,
-        clockIn: clockInIso,
-        displayStatus: 'Available',
-        isProductive: true,
-        statusSince: clockInIso,
-        breakToday: formatDurationHuman(breakTodayMs),
+        userId: member.user.id,
+        employeeName: member.user.name,
+        timeLogId: open.id,
+        clockIn: isoField(shiftStart),
+        displayStatus: open.activityStatus.name,
+        isProductive: isProductiveType(open.activityStatus.type),
+        statusSince: isoField(open.startTime),
+        breakToday: formatDurationHuman(breakTodayByUser.get(member.userId) ?? 0),
         isOnShift: true,
       };
-    }
-
-    return {
-      userId: user.id,
-      employeeName: user.name,
-      timeLogId: log.id,
-      clockIn: clockInIso,
-      displayStatus: openActivity.status.name,
-      isProductive: openActivity.status.isProductive,
-      statusSince: isoField(openActivity.startTime),
-      breakToday: formatDurationHuman(breakTodayMs),
-      isOnShift: true,
-    };
-  });
+    })
+  );
 
   let availableCount = 0;
   let onBreakCount = 0;
@@ -188,7 +170,7 @@ export async function getAdminOverviewService(
   for (const agent of floorAgents) {
     if (!agent.isOnShift) continue;
 
-    if (agent.displayStatus === 'Available') {
+    if (agent.displayStatus === AVAILABLE_STATUS_NAME) {
       availableCount += 1;
       continue;
     }
@@ -212,24 +194,25 @@ export async function getAdminOverviewService(
   const offFloorCount = floorAgents.filter((agent) => !agent.isOnShift).length;
 
   const statusBreakdown: StatusBreakdownItem[] = [
-    { name: 'Available', count: availableCount, isProductive: true },
+    { name: AVAILABLE_STATUS_NAME, count: availableCount, isProductive: true },
     ...[...statusCountMap.values()]
-      .filter((item) => item.name !== 'Available')
+      .filter((item) => item.name !== AVAILABLE_STATUS_NAME)
       .sort((left, right) => left.name.localeCompare(right.name)),
     { name: 'Off Floor', count: offFloorCount, isProductive: false },
   ];
 
   const complianceAlerts: ComplianceAlert[] = [];
 
-  for (const log of activeLogs) {
-    const clockInIso = isoField(log.clockIn);
-    const elapsedMs = nowMs - log.clockIn.getTime();
+  for (const open of openSegments) {
+    const shiftStart = await awaitFirstSegmentStart(organizationId, open.userId, open.startTime);
+    const clockInIso = isoField(shiftStart);
+    const elapsedMs = nowMs - shiftStart.getTime();
 
     if (elapsedMs > TWELVE_HOURS_MS) {
       complianceAlerts.push({
-        userId: log.user.id,
-        employeeName: log.user.name,
-        timeLogId: log.id,
+        userId: open.user.id,
+        employeeName: open.user.name,
+        timeLogId: open.id,
         clockIn: clockInIso,
         elapsedHours: Math.round((elapsedMs / (1000 * 60 * 60)) * 10) / 10,
         message: 'Potential missed clock-out detected',
@@ -237,19 +220,16 @@ export async function getAdminOverviewService(
       });
     }
 
-    const openActivity =
-      [...log.activityLogs].reverse().find((entry) => entry.endTime === null) ?? null;
-
-    if (openActivity && !openActivity.status.isProductive) {
-      const statusElapsedMs = nowMs - openActivity.startTime.getTime();
+    if (isBreakType(open.activityStatus.type)) {
+      const statusElapsedMs = nowMs - open.startTime.getTime();
       if (statusElapsedMs > THIRTY_MINUTES_MS) {
         complianceAlerts.push({
-          userId: log.user.id,
-          employeeName: log.user.name,
-          timeLogId: log.id,
+          userId: open.user.id,
+          employeeName: open.user.name,
+          timeLogId: open.id,
           clockIn: clockInIso,
           elapsedHours: Math.round((statusElapsedMs / (1000 * 60 * 60)) * 10) / 10,
-          message: `Extended ${openActivity.status.name.toLowerCase()} (${formatDurationHuman(statusElapsedMs)})`,
+          message: `Extended ${open.activityStatus.name.toLowerCase()} (${formatDurationHuman(statusElapsedMs)})`,
           severity: 'warning',
         });
       }
@@ -260,11 +240,11 @@ export async function getAdminOverviewService(
     success: true,
     data: {
       kpis: {
-        activeShiftCount: activeLogs.length,
+        activeShiftCount: openSegments.length,
         onBreakCount,
         availableCount,
         offFloorCount,
-        totalRegistered,
+        totalRegistered: members.length,
       },
       statusBreakdown,
       floorAgents,
@@ -273,14 +253,32 @@ export async function getAdminOverviewService(
   };
 }
 
+async function awaitFirstSegmentStart(
+  organizationId: string,
+  userId: string,
+  currentStart: Date
+): Promise<Date> {
+  const dayStart = new Date(currentStart.toISOString().slice(0, 10) + 'T00:00:00.000Z');
+  const firstToday = await prisma.timeLog.findFirst({
+    where: {
+      organizationId,
+      userId,
+      startTime: { gte: dayStart },
+    },
+    orderBy: { startTime: 'asc' },
+    select: { startTime: true },
+  });
+  return firstToday?.startTime ?? currentStart;
+}
+
 export async function getTimesheetsService(
-  companyId: string,
+  organizationId: string,
   startDate: string,
   endDate: string
 ): Promise<ServiceResult<{ rows: TimesheetRow[] }>> {
-  const company = await prisma.company.findUnique({ where: { id: companyId } });
-  if (!company) {
-    return fail(TimeTrackingErrorCodes.USER_NOT_IN_COMPANY, 'Company not found.');
+  const organization = await prisma.organization.findUnique({ where: { id: organizationId } });
+  if (!organization) {
+    return fail(TimeTrackingErrorCodes.USER_NOT_IN_COMPANY, 'Organization not found.');
   }
 
   const rangeStart = new Date(`${startDate}T00:00:00.000Z`);
@@ -290,50 +288,59 @@ export async function getTimesheetsService(
     return fail(TimeTrackingErrorCodes.VALIDATION_ERROR, 'startDate must be before endDate.');
   }
 
-  const logs = await prisma.timeLog.findMany({
+  const segments = await prisma.timeLog.findMany({
     where: {
-      companyId,
-      clockIn: { gte: rangeStart, lte: rangeEnd },
+      organizationId,
+      startTime: { gte: rangeStart, lte: rangeEnd },
     },
     include: {
       user: { select: { id: true, name: true } },
-      activityLogs: { include: { status: { select: { isProductive: true } } } },
+      activityStatus: { select: { type: true } },
     },
-    orderBy: { clockIn: 'desc' },
+    orderBy: { startTime: 'desc' },
   });
 
-  const rows: TimesheetRow[] = logs.map((log) => {
-    const serialized = serializeTimeLog(log);
-    const clockInIso = isoField(serialized.clockIn);
-    const clockOutIso = isoFieldOrNull(serialized.clockOut);
-    const clockOutMs = clockOutIso ? new Date(clockOutIso).getTime() : Date.now();
-    const grossMs = Math.max(0, clockOutMs - new Date(clockInIso).getTime());
-    const nonProductiveMs = computeNonProductiveMs(log.activityLogs, nowMsFromLog(log));
+  const grouped = new Map<string, typeof segments>();
 
-    const netWorkHours =
-      log.netWorkMinutes != null
-        ? formatNetWorkMinutes(log.netWorkMinutes)
-        : formatDurationHours(Math.max(0, grossMs - nonProductiveMs));
+  for (const segment of segments) {
+    const dayKey = `${segment.userId}:${segment.startTime.toISOString().slice(0, 10)}`;
+    const bucket = grouped.get(dayKey) ?? [];
+    bucket.push(segment);
+    grouped.set(dayKey, bucket);
+  }
 
-    return {
-      timeLogId: log.id,
-      userId: log.user.id,
-      employeeName: log.user.name,
-      date: isoField(serialized.clockIn),
-      clockIn: isoField(serialized.clockIn),
-      clockOut: isoFieldOrNull(serialized.clockOut),
-      clockInFormatted: formatTimeLocal(isoField(serialized.clockIn)),
-      clockOutFormatted: serialized.clockOut
-        ? formatTimeLocal(isoField(serialized.clockOut))
-        : '—',
-      breakDeductions: formatDurationHuman(nonProductiveMs),
-      netWorkHours,
-    };
-  });
+  const rows: TimesheetRow[] = [];
+
+  for (const [, daySegments] of grouped) {
+    const sorted = [...daySegments].sort(
+      (a, b) => a.startTime.getTime() - b.startTime.getTime()
+    );
+    const first = sorted[0];
+    const last = sorted[sorted.length - 1];
+    const clockInIso = isoField(first.startTime);
+    const clockOutIso = last.endTime ? isoField(last.endTime) : null;
+    const endMs = last.endTime?.getTime() ?? Date.now();
+    const grossMs = Math.max(0, endMs - first.startTime.getTime());
+    const breakMs = sorted.reduce((total, segment) => {
+      if (isProductiveType(segment.activityStatus.type)) return total;
+      return total + segmentDurationMs(segment.startTime, segment.endTime);
+    }, 0);
+
+    rows.push({
+      timeLogId: first.id,
+      userId: first.user.id,
+      employeeName: first.user.name,
+      date: clockInIso,
+      clockIn: clockInIso,
+      clockOut: clockOutIso,
+      clockInFormatted: formatTimeLocal(clockInIso),
+      clockOutFormatted: clockOutIso ? formatTimeLocal(clockOutIso) : '—',
+      breakDeductions: formatDurationHuman(breakMs),
+      netWorkHours: formatDurationHours(Math.max(0, grossMs - breakMs)),
+    });
+  }
+
+  rows.sort((a, b) => new Date(b.clockIn).getTime() - new Date(a.clockIn).getTime());
 
   return { success: true, data: { rows } };
-}
-
-function nowMsFromLog(log: { clockOut: Date | null }): number {
-  return log.clockOut ? log.clockOut.getTime() : Date.now();
 }

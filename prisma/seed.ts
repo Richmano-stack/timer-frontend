@@ -1,96 +1,84 @@
-import { PrismaClient, UserRole } from '@prisma/client';
+import { PrismaClient } from '@prisma/client';
+import { DEFAULT_ACTIVITY_STATUSES } from '../lib/constants/default-activity-statuses';
+import { seedDefaultActivityStatuses } from '../lib/services/organization-bootstrap.service';
+import { auth } from '../lib/auth';
 
 const prisma = new PrismaClient();
 
-const DEMO_COMPANY_ID = '00000000-0000-4000-8000-000000000010';
-const DEMO_USER_ID = '00000000-0000-4000-8000-000000000001';
+const DEMO_ORG_ID = '00000000-0000-4000-8000-000000000010';
+const DEMO_EMAIL = 'demo@example.com';
+const DEMO_PASSWORD = 'DemoPassword1!';
 
-const BASELINE_STATUSES = [
-  {
-    id: '00000000-0000-4000-8000-000000000104',
-    name: 'On Call',
-    isProductive: true,
-  },
-  {
-    id: '00000000-0000-4000-8000-000000000105',
-    name: 'Live Chat',
-    isProductive: true,
-  },
-  {
-    id: '00000000-0000-4000-8000-000000000106',
-    name: 'After Call Work',
-    isProductive: true,
-  },
-  {
-    id: '00000000-0000-4000-8000-000000000103',
-    name: 'Meeting',
-    isProductive: true,
-  },
-  {
-    id: '00000000-0000-4000-8000-000000000102',
-    name: 'Short Break',
-    isProductive: false,
-  },
-  {
-    id: '00000000-0000-4000-8000-000000000101',
-    name: 'Lunch',
-    isProductive: false,
-  },
-] as const;
+async function ensureDemoUser() {
+  const existing = await prisma.user.findUnique({
+    where: { email: DEMO_EMAIL },
+    select: { id: true },
+  });
+
+  if (existing) return existing.id;
+
+  const signUpResult = await auth.api.signUpEmail({
+    body: {
+      email: DEMO_EMAIL,
+      password: DEMO_PASSWORD,
+      name: 'Demo Owner',
+    },
+  });
+
+  if (signUpResult?.user?.id) {
+    return signUpResult.user.id;
+  }
+
+  const created = await prisma.user.findUniqueOrThrow({
+    where: { email: DEMO_EMAIL },
+    select: { id: true },
+  });
+
+  return created.id;
+}
 
 async function main() {
-  const company = await prisma.company.upsert({
-    where: { id: DEMO_COMPANY_ID },
+  const userId = await ensureDemoUser();
+
+  const organization = await prisma.organization.upsert({
+    where: { slug: 'demo-company' },
     update: { name: 'Demo Company' },
     create: {
-      id: DEMO_COMPANY_ID,
+      id: DEMO_ORG_ID,
       name: 'Demo Company',
+      slug: 'demo-company',
     },
   });
 
-  await prisma.user.upsert({
-    where: { id: DEMO_USER_ID },
-    update: {
-      name: 'Demo Employee',
-      email: 'demo@example.com',
-      role: UserRole.EMPLOYEE,
-      isActive: true,
-      companyId: company.id,
+  await prisma.member.upsert({
+    where: {
+      organizationId_userId: {
+        organizationId: organization.id,
+        userId,
+      },
     },
+    update: { role: 'owner' },
     create: {
-      id: DEMO_USER_ID,
-      companyId: company.id,
-      email: 'demo@example.com',
-      name: 'Demo Employee',
-      role: UserRole.EMPLOYEE,
-      isActive: true,
+      id: crypto.randomUUID(),
+      organizationId: organization.id,
+      userId,
+      role: 'owner',
     },
   });
 
-  for (const status of BASELINE_STATUSES) {
-    await prisma.activityStatus.upsert({
-      where: {
-        companyId_name: {
-          companyId: company.id,
-          name: status.name,
-        },
-      },
-      update: {
-        isProductive: status.isProductive,
-      },
-      create: {
-        id: status.id,
-        companyId: company.id,
-        name: status.name,
-        isProductive: status.isProductive,
-      },
-    });
+  const seedResult = await seedDefaultActivityStatuses(organization.id);
+  if (!seedResult.success) {
+    throw new Error(seedResult.error.message);
   }
 
   console.log('Seed complete:', {
-    companyId: company.id,
-    userId: DEMO_USER_ID,
-    activityStatuses: BASELINE_STATUSES.map((status) => status.name),
+    organizationId: organization.id,
+    organizationSlug: organization.slug,
+    userId,
+    email: DEMO_EMAIL,
+    password: DEMO_PASSWORD,
+    activityStatuses: DEFAULT_ACTIVITY_STATUSES.map((status) => status.name),
+    seeded: seedResult.data.seeded,
   });
 }
 

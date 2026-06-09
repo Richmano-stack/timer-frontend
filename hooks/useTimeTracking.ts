@@ -3,23 +3,12 @@
 import { useCallback, useEffect, useState } from 'react';
 import { api, ApiError } from '@/lib/api';
 import {
-  ActiveSession,
   ActivityStatusOption,
   MyDayResponse,
   SetStatusResponse,
   TimeLogResponse,
 } from '@/types/time-tracking';
-
-const DEV_USER_ID = process.env.NEXT_PUBLIC_DEV_USER_ID ?? '';
-const DEV_COMPANY_ID = process.env.NEXT_PUBLIC_DEV_COMPANY_ID ?? '';
-
-function getIdentity() {
-  if (!DEV_USER_ID || !DEV_COMPANY_ID) {
-    throw new Error('Missing NEXT_PUBLIC_DEV_USER_ID or NEXT_PUBLIC_DEV_COMPANY_ID');
-  }
-
-  return { userId: DEV_USER_ID, companyId: DEV_COMPANY_ID };
-}
+import { ActiveSession } from '@/types/time-tracking';
 
 export function localTodayDateString(): string {
   const now = new Date();
@@ -31,9 +20,6 @@ export function localTodayDateString(): string {
 
 export interface ClockInOptions {
   notes?: string;
-  latitude?: number | null;
-  longitude?: number | null;
-  clockInIp?: string | null;
 }
 
 export function useTimeTracking() {
@@ -46,10 +32,7 @@ export function useTimeTracking() {
   const session: ActiveSession | null = myDay?.activeSession ?? null;
 
   const refresh = useCallback(async () => {
-    const { userId, companyId } = getIdentity();
     const params = new URLSearchParams({
-      userId,
-      companyId,
       date: localTodayDateString(),
     });
     const data = await api.get<MyDayResponse>(`/api/time/my-day?${params.toString()}`);
@@ -90,7 +73,7 @@ export function useTimeTracking() {
   }, [refresh]);
 
   const runAction = useCallback(
-    async (action: () => Promise<void>) => {
+    async (action: () => Promise<void>): Promise<boolean> => {
       setIsSubmitting(true);
       setError(null);
       setErrorCode(null);
@@ -98,6 +81,7 @@ export function useTimeTracking() {
       try {
         await action();
         await refresh();
+        return true;
       } catch (err) {
         if (err instanceof ApiError) {
           setError(err.message);
@@ -105,6 +89,7 @@ export function useTimeTracking() {
         } else {
           setError(err instanceof Error ? err.message : 'Action failed');
         }
+        return false;
       } finally {
         setIsSubmitting(false);
       }
@@ -119,15 +104,9 @@ export function useTimeTracking() {
 
   const clockIn = useCallback(
     async (options: ClockInOptions = {}) => {
-      const { userId, companyId } = getIdentity();
-      await runAction(async () => {
+      return runAction(async () => {
         await api.post<TimeLogResponse>('/api/time/clock-in', {
-          userId,
-          companyId,
           notes: options.notes,
-          latitude: options.latitude ?? null,
-          longitude: options.longitude ?? null,
-          clockInIp: options.clockInIp ?? null,
         });
       });
     },
@@ -135,33 +114,21 @@ export function useTimeTracking() {
   );
 
   const clockOut = useCallback(async () => {
-    const { userId, companyId } = getIdentity();
-    await runAction(async () => {
-      await api.post<TimeLogResponse>('/api/time/clock-out', {
-        userId,
-        companyId,
-        clockOutIp: null,
-      });
+    return runAction(async () => {
+      await api.post<TimeLogResponse>('/api/time/clock-out');
     });
   }, [runAction]);
 
   const setAvailable = useCallback(async () => {
-    const { userId, companyId } = getIdentity();
-    await runAction(async () => {
-      await api.post<SetStatusResponse>('/api/time/status', {
-        userId,
-        companyId,
-      });
+    return runAction(async () => {
+      await api.post<SetStatusResponse>('/api/time/status', {});
     });
   }, [runAction]);
 
   const setStatus = useCallback(
     async (status: Pick<ActivityStatusOption, 'id' | 'name'>) => {
-      const { userId, companyId } = getIdentity();
-      await runAction(async () => {
+      return runAction(async () => {
         await api.post<SetStatusResponse>('/api/time/status', {
-          userId,
-          companyId,
           statusId: status.id,
         });
       });

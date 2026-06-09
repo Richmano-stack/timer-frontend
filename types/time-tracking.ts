@@ -1,34 +1,22 @@
-export interface TimeLog {
+import { StatusType } from '@prisma/client';
+
+export interface TimeLogSegment {
   id: string;
   userId: string;
-  companyId: string;
-  clockIn: string;
-  clockOut: string | null;
-  netWorkMinutes: number | null;
-  clockInIp: string | null;
-  clockOutIp: string | null;
-  latitude: string | null;
-  longitude: string | null;
-  notes: string;
-  createdAt: string;
-  updatedAt: string;
-}
-
-export interface ActivityLog {
-  id: string;
-  timeLogId: string;
-  statusId: string;
+  organizationId: string;
+  activityStatusId: string;
   statusName: string;
+  type: StatusType;
+  colorCode: string;
+  isBillable: boolean;
   isProductive: boolean;
   startTime: string;
   endTime: string | null;
-  createdAt: string;
-  updatedAt: string;
+  notes: string | null;
 }
 
 export interface ActiveSession {
-  timeLog: TimeLog;
-  activeActivity: ActivityLog | null;
+  activeSegment: TimeLogSegment | null;
 }
 
 export interface ApiEnvelope<T> {
@@ -41,12 +29,15 @@ export interface ApiEnvelope<T> {
 }
 
 export interface TimeLogResponse {
-  timeLog: TimeLog;
+  segment: TimeLogSegment;
 }
 
 export interface ActivityStatusOption {
   id: string;
   name: string;
+  type: StatusType;
+  colorCode: string;
+  isBillable: boolean;
   isProductive: boolean;
 }
 
@@ -102,5 +93,5 @@ export interface MyDayResponse {
 }
 
 export interface SetStatusResponse {
-  activityLog: ActivityLog | null;
+  segment: TimeLogSegment | null;
 }

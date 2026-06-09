@@ -1,4 +1,5 @@
-import { fail, fromServiceResult } from '@/lib/http/api-handler';
+import { fail } from '@/lib/http/api-handler';
+import { executeAdminRoute } from '@/lib/http/session-route';
 import { getTimesheetsService } from '@/lib/services/admin-dashboard.service';
 import { TimeTrackingErrorCodes } from '@/lib/errors/time-tracking';
 import { timesheetsQuerySchema } from '@/lib/validators/admin';
@@ -7,7 +8,6 @@ export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
 
   const parsed = timesheetsQuerySchema.safeParse({
-    companyId: searchParams.get('companyId'),
     startDate: searchParams.get('startDate'),
     endDate: searchParams.get('endDate'),
   });
@@ -19,7 +19,9 @@ export async function GET(request: Request) {
     );
   }
 
-  const { companyId, startDate, endDate } = parsed.data;
-  const result = await getTimesheetsService(companyId, startDate, endDate);
-  return fromServiceResult(result);
+  const { startDate, endDate } = parsed.data;
+
+  return executeAdminRoute(request, ({ organizationId }) =>
+    getTimesheetsService(organizationId, startDate, endDate)
+  );
 }

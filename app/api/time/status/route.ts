@@ -1,22 +1,18 @@
-import { fail, executeServiceRoute } from '@/lib/http/api-handler';
+import { fail } from '@/lib/http/api-handler';
+import {
+  executeAuthenticatedRoute,
+  invalidJsonResponse,
+  parseJsonBody,
+} from '@/lib/http/session-route';
 import { setStatusService } from '@/lib/services/time-tracking.service';
 import { TimeTrackingErrorCodes } from '@/lib/errors/time-tracking';
 import { setStatusBodySchema } from '@/lib/validators/time-tracking';
 
 export async function POST(request: Request) {
-  let body: unknown;
+  const body = await parseJsonBody(request);
+  if (body === null) return invalidJsonResponse();
 
-  try {
-    body = await request.json();
-  } catch {
-    return fail(
-      TimeTrackingErrorCodes.VALIDATION_ERROR,
-      'Request body must be valid JSON.'
-    );
-  }
-
-  const parsed = setStatusBodySchema.safeParse(body);
-
+  const parsed = setStatusBodySchema.safeParse(body ?? {});
   if (!parsed.success) {
     return fail(
       TimeTrackingErrorCodes.VALIDATION_ERROR,
@@ -24,9 +20,9 @@ export async function POST(request: Request) {
     );
   }
 
-  const { userId, companyId, statusId, statusName } = parsed.data;
+  const { statusId, statusName } = parsed.data;
 
-  return executeServiceRoute(() =>
-    setStatusService(userId, companyId, statusId, statusName)
+  return executeAuthenticatedRoute(request, ({ userId, organizationId }) =>
+    setStatusService(userId, organizationId, statusId, statusName)
   );
 }
