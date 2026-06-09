@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { hasSessionCookie } from '@/lib/security/middleware-session';
 
-const PROTECTED_PREFIXES = ['/employee', '/admin'];
+const PROTECTED_PREFIXES = ['/employee', '/admin', '/onboarding', '/billing'];
 
 export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
@@ -24,5 +24,10 @@ export async function middleware(request: NextRequest) {
 }
 
 export const config = {
-  matcher: ['/employee/:path*', '/admin/:path*'],
+  matcher: [
+    '/employee/:path*',
+    '/admin/:path*',
+    '/onboarding',
+    '/billing/:path*',
+  ],
 };

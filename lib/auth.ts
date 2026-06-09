@@ -15,6 +15,16 @@ export const auth = betterAuth({
   plugins: [
     organization({
       allowUserToCreateOrganization: true,
+      async sendInvitationEmail(data) {
+        const baseUrl = process.env.NEXT_PUBLIC_APP_URL ?? 'http://localhost:3000';
+        const inviteLink = `${baseUrl}/register?token=${data.id}`;
+
+        console.info('[organization] Invitation email stub', {
+          to: data.email,
+          organization: data.organization.name,
+          inviteLink,
+        });
+      },
     }),
   ],
 });
