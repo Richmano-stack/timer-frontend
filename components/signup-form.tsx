@@ -4,9 +4,8 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { FormEvent, useState } from 'react';
 import { AuthBrand } from '@/components/auth-brand';
-import { api } from '@/lib/api';
 import { authClient } from '@/lib/auth-client';
-import { slugifyOrganizationName } from '@/lib/utils/org-slug';
+import type { ResolvedInvitation } from '@/lib/invitations/resolve-invitation-token';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import {
@@ -24,15 +23,22 @@ import {
 } from '@/components/ui/field';
 import { Input } from '@/components/ui/input';
 
+interface SignupFormProps extends React.ComponentProps<'div'> {
+  invitation?: ResolvedInvitation | null;
+  inviteToken?: string;
+}
+
 export function SignupForm({
   className,
+  invitation,
+  inviteToken,
   ...props
-}: React.ComponentProps<'div'>) {
+}: SignupFormProps) {
   const router = useRouter();
+  const isInviteFlow = Boolean(invitation && inviteToken);
 
   const [name, setName] = useState('');
-  const [organizationName, setOrganizationName] = useState('');
-  const [email, setEmail] = useState('');
+  const [email, setEmail] = useState(invitation?.email ?? '');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [error, setError] = useState<string | null>(null);
@@ -52,11 +58,6 @@ export function SignupForm({
       return;
     }
 
-    if (!organizationName.trim()) {
-      setError('Organization name is required.');
-      return;
-    }
-
     setIsSubmitting(true);
 
     try {
@@ -71,35 +72,39 @@ export function SignupForm({
         return;
       }
 
-      const slug = slugifyOrganizationName(organizationName);
-      const orgResult = await authClient.organization.create({
-        name: organizationName.trim(),
-        slug,
-      });
+      if (isInviteFlow && inviteToken) {
+        const acceptResult = await authClient.organization.acceptInvitation({
+          invitationId: inviteToken,
+        });
 
-      if (orgResult.error) {
-        setError(orgResult.error.message ?? 'Failed to create organization.');
+        if (acceptResult.error) {
+          setError(acceptResult.error.message ?? 'Failed to accept invitation.');
+          return;
+        }
+
+        const organizationId =
+          acceptResult.data?.member?.organizationId ?? invitation?.organizationId;
+
+        if (!organizationId) {
+          setError('Invitation was accepted but no organization was returned.');
+          return;
+        }
+
+        const activeResult = await authClient.organization.setActive({
+          organizationId,
+        });
+
+        if (activeResult.error) {
+          setError(activeResult.error.message ?? 'Failed to set active organization.');
+          return;
+        }
+
+        router.replace('/employee/track');
+        router.refresh();
         return;
       }
 
-      const organizationId = orgResult.data?.id;
-      if (!organizationId) {
-        setError('Organization was created but no ID was returned.');
-        return;
-      }
-
-      const activeResult = await authClient.organization.setActive({
-        organizationId,
-      });
-
-      if (activeResult.error) {
-        setError(activeResult.error.message ?? 'Failed to set active organization.');
-        return;
-      }
-
-      await api.post<{ seeded: number }>('/api/organization/bootstrap');
-
-      router.replace('/employee/track');
+      router.replace('/onboarding');
       router.refresh();
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Sign up failed.');
@@ -113,9 +118,13 @@ export function SignupForm({
       <AuthBrand />
       <Card>
         <CardHeader>
-          <CardTitle>Create an account</CardTitle>
+          <CardTitle>
+            {isInviteFlow ? 'Join your team' : 'Create an account'}
+          </CardTitle>
           <CardDescription>
-            Enter your information below to create your account and organization
+            {isInviteFlow
+              ? `You have been invited to join ${invitation?.organizationName}. Create your account to get started.`
+              : 'Enter your information below to create your account'}
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -134,21 +143,21 @@ export function SignupForm({
                   disabled={isSubmitting}
                 />
               </Field>
-              <Field>
-                <FieldLabel htmlFor="organization">Organization</FieldLabel>
-                <Input
-                  id="organization"
-                  type="text"
-                  placeholder="Acme Inc"
-                  required
-                  value={organizationName}
-                  onChange={(event) => setOrganizationName(event.target.value)}
-                  disabled={isSubmitting}
-                />
-                <FieldDescription>
-                  Your company or team workspace for time tracking.
-                </FieldDescription>
-              </Field>
+              {isInviteFlow && (
+                <Field>
+                  <FieldLabel htmlFor="organization">Organization</FieldLabel>
+                  <Input
+                    id="organization"
+                    type="text"
+                    value={invitation?.organizationName ?? ''}
+                    readOnly
+                    disabled
+                  />
+                  <FieldDescription>
+                    You will join as a team member after creating your account.
+                  </FieldDescription>
+                </Field>
+              )}
               <Field>
                 <FieldLabel htmlFor="email">Email</FieldLabel>
                 <Input
@@ -159,7 +168,8 @@ export function SignupForm({
                   required
                   value={email}
                   onChange={(event) => setEmail(event.target.value)}
-                  disabled={isSubmitting}
+                  disabled={isSubmitting || isInviteFlow}
+                  readOnly={isInviteFlow}
                 />
               </Field>
               <Field>
@@ -196,7 +206,13 @@ export function SignupForm({
               )}
               <Field>
                 <Button type="submit" className="w-full" disabled={isSubmitting}>
-                  {isSubmitting ? 'Creating account…' : 'Create Account'}
+                  {isSubmitting
+                    ? isInviteFlow
+                      ? 'Joining team…'
+                      : 'Creating account…'
+                    : isInviteFlow
+                      ? 'Create Account & Join'
+                      : 'Create Account'}
                 </Button>
                 <FieldDescription className="text-center">
                   Already have an account?{' '}

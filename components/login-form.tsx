@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { FormEvent, useState } from 'react';
+import { FormEvent, useEffect, useState } from 'react';
 import { AuthBrand } from '@/components/auth-brand';
 import { authClient } from '@/lib/auth-client';
 import { cn } from '@/lib/utils';
@@ -24,18 +24,33 @@ import { Input } from '@/components/ui/input';
 
 const IS_DEV = process.env.NODE_ENV === 'development';
 
+function isAdminRole(role: string | undefined | null): boolean {
+  return role === 'owner' || role === 'admin';
+}
+
+interface LoginFormProps extends React.ComponentProps<'div'> {
+  initialError?: string | null;
+}
+
 export function LoginForm({
   className,
+  initialError,
   ...props
-}: React.ComponentProps<'div'>) {
+}: LoginFormProps) {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const nextPath = searchParams.get('next') ?? '/employee/track';
+  const nextPath = searchParams.get('next');
 
   const [email, setEmail] = useState(IS_DEV ? 'demo@example.com' : '');
   const [password, setPassword] = useState(IS_DEV ? 'DemoPassword1!' : '');
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(initialError ?? null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+
+  useEffect(() => {
+    if (initialError) {
+      setError(initialError);
+    }
+  }, [initialError]);
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -56,27 +71,35 @@ export function LoginForm({
       const orgsResult = await authClient.organization.list();
       const organizations = orgsResult.data ?? [];
 
-      if (organizations.length > 0) {
-        const activeResult = await authClient.organization.setActive({
-          organizationId: organizations[0].id,
-        });
-
-        if (activeResult.error) {
-          setError(activeResult.error.message ?? 'Failed to set active organization.');
-          return;
-        }
-      } else {
-        const activeResult = await authClient.organization.setActive({
-          organizationSlug: 'demo-company',
-        });
-
-        if (activeResult.error) {
-          setError(activeResult.error.message ?? 'No organization membership found.');
-          return;
-        }
+      if (organizations.length === 0) {
+        router.replace('/onboarding');
+        router.refresh();
+        return;
       }
 
-      router.replace(nextPath);
+      const activeResult = await authClient.organization.setActive({
+        organizationId: organizations[0].id,
+      });
+
+      if (activeResult.error) {
+        setError(activeResult.error.message ?? 'Failed to set active organization.');
+        return;
+      }
+
+      const roleResult = await authClient.organization.getActiveMemberRole();
+      const role = roleResult.data?.role;
+
+      if (nextPath) {
+        router.replace(nextPath);
+        router.refresh();
+        return;
+      }
+
+      if (isAdminRole(role)) {
+        router.replace('/admin/overview');
+      } else {
+        router.replace('/employee/track');
+      }
       router.refresh();
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Sign in failed.');
