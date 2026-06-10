@@ -1,4 +1,9 @@
+import type { Metadata } from 'next';
 import { notFound } from 'next/navigation';
+
+export const metadata: Metadata = {
+  title: 'Join',
+};
 import { JoinForm } from '@/components/join/JoinForm';
 import { getOrganizationBySlug } from '@/lib/services/join.service';
 

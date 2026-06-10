@@ -78,8 +78,8 @@ export function SignupForm({
         <CardHeader>
           <CardTitle>Create an owner account</CardTitle>
           <CardDescription>
-            Register to create your organization workspace. Team members should use your
-            company join link instead.
+            Create your OmniShift organization workspace. Team members should use your company
+            join link instead.
           </CardDescription>
         </CardHeader>
         <CardContent>

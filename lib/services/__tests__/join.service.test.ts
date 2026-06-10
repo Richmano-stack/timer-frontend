@@ -1,3 +1,4 @@
+import { Prisma } from '@prisma/client';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { JoinErrorCodes } from '@/lib/errors/join';
 import { ORG_ID, USER_ID } from '@/test/fixtures/time-log';
@@ -186,6 +187,22 @@ describe('completeOrganizationJoin', () => {
     expect(mockOrgFindUnique).toHaveBeenCalledWith(
       expect.objectContaining({ where: { slug: ORG_SLUG } })
     );
+  });
+
+  it('returns ALREADY_MEMBER when member.create races and throws P2002', async () => {
+    mockMemberFindUnique.mockResolvedValue(null);
+    const uniqueViolation = new Prisma.PrismaClientKnownRequestError(
+      'Unique constraint failed',
+      { code: 'P2002', clientVersion: 'test' }
+    );
+    mockMemberCreate.mockRejectedValue(uniqueViolation);
+
+    const result = await completeOrganizationJoin(ORG_SLUG, USER_ID, 'user@acme.com');
+
+    expect(result.success).toBe(false);
+    if (!result.success) {
+      expect(result.error.code).toBe(JoinErrorCodes.ALREADY_MEMBER);
+    }
   });
 });
 

@@ -1,4 +1,4 @@
-# API Reference — Timer Frontend
+# API Reference — OmniShift
 
 > **Generated from static analysis of** `app/api/**/*` **and downstream service/validation layers.**  
 > **Last scanned:** 13 custom route handlers + Better Auth proxy  
@@ -87,6 +87,7 @@ Defined in `lib/http/api-handler.ts`:
 | `DOMAIN_NOT_ALLOWED` | 403 |
 | `NO_ALLOWED_DOMAINS` | 403 |
 | `VALIDATION_ERROR` | 400 |
+| `RATE_LIMITED` | 429 |
 | `ORGANIZATION_NOT_FOUND` | 404 |
 | `NO_ACTIVE_SESSION_FOUND` | 404 |
 | `TIMELOG_NOT_FOUND` | 404 |
@@ -651,6 +652,7 @@ In development, the link URL is logged to the server console (`[magic-link] Sign
 | `ORGANIZATION_NOT_FOUND` | 404 | Unknown `orgSlug` |
 | `DOMAIN_NOT_ALLOWED` | 403 | Email domain not in allowlist |
 | `NO_ALLOWED_DOMAINS` | 403 | Org has no domains configured |
+| `RATE_LIMITED` | 429 | Too many requests from same IP (10 / 15 min) or email (5 / 15 min) |
 | `VALIDATION_ERROR` | 400 | Invalid email or slug |
 
 ### Post-magic-link flow (not an API route)

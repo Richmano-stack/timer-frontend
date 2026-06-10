@@ -1,4 +1,9 @@
+import type { Metadata } from 'next';
 import Link from 'next/link';
+
+export const metadata: Metadata = {
+  title: 'Billing',
+};
 import { AuthBrand } from '@/components/auth-brand';
 import { Button, buttonVariants } from '@/components/ui/button';
 import {

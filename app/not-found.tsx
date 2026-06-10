@@ -9,7 +9,7 @@ export default function NotFound() {
         href="/employee/track"
         className="mt-8 rounded-xl bg-brand-accent px-6 py-3 text-sm font-semibold text-white transition hover:opacity-90"
       >
-        Back to Time Card
+        Back to OmniShift
       </Link>
     </div>
   );
