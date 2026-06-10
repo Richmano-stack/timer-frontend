@@ -1,4 +1,5 @@
 import { randomUUID } from 'crypto';
+import { Prisma } from '@prisma/client';
 import { prisma } from '@/lib/db/prisma';
 import { JoinErrorCodes } from '@/lib/errors/join';
 import { fail as joinFail } from '@/lib/errors/join-service';
@@ -114,23 +115,36 @@ export async function completeOrganizationJoin(
     );
   }
 
-  const member = await prisma.member.create({
-    data: {
-      id: randomUUID(),
-      organizationId,
-      userId,
-      role: 'member',
-    },
-    select: { id: true, organizationId: true },
-  });
+  try {
+    const member = await prisma.member.create({
+      data: {
+        id: randomUUID(),
+        organizationId,
+        userId,
+        role: 'member',
+      },
+      select: { id: true, organizationId: true },
+    });
 
-  return {
-    success: true,
-    data: {
-      organizationId: member.organizationId,
-      memberId: member.id,
-    },
-  };
+    return {
+      success: true,
+      data: {
+        organizationId: member.organizationId,
+        memberId: member.id,
+      },
+    };
+  } catch (error) {
+    if (
+      error instanceof Prisma.PrismaClientKnownRequestError &&
+      error.code === 'P2002'
+    ) {
+      return joinFail(
+        JoinErrorCodes.ALREADY_MEMBER,
+        'You are already a member of this organization.'
+      );
+    }
+    throw error;
+  }
 }
 
 export async function initializeJoinMetadata(

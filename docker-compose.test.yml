@@ -1,0 +1,21 @@
+services:
+  postgres-test:
+    image: postgres:16-alpine
+    container_name: timer-postgres-test
+    restart: unless-stopped
+    ports:
+      - "5435:5432"
+    environment:
+      POSTGRES_USER: timer_test_user
+      POSTGRES_PASSWORD: timer_test_secret
+      POSTGRES_DB: timer_test
+    volumes:
+      - timer_pg_test_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U timer_test_user -d timer_test"]
+      interval: 3s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  timer_pg_test_data:

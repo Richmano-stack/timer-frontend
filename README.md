@@ -1,6 +1,6 @@
-# Timer — Call Center Time Tracking
+# OmniShift — Call Center Time Tracking
 
-A full-stack **Next.js** app for call-center time tracking: employees clock in and switch activity statuses; admins monitor the floor, export timesheets, and manage team join settings.
+**OmniShift** is a full-stack **Next.js** app for call-center time tracking: employees clock in and switch activity statuses; admins monitor the floor, export timesheets, and manage team join settings.
 
 **Documentation:** [ARCHITECTURE.md](./ARCHITECTURE.md) (system map) · [API_REFERENCE.md](./API_REFERENCE.md) (endpoints)
 
@@ -71,11 +71,24 @@ Open [http://localhost:3000](http://localhost:3000).
 pnpm dev          # Dev server
 pnpm lint         # ESLint
 pnpm test         # Vitest (watch)
-pnpm test:run     # Vitest (CI / single run)
+pnpm test:run     # Unit tests only (CI)
+pnpm test:integration  # DB + route tests (requires test Postgres)
+pnpm test:all     # Unit + integration
 pnpm db:studio    # Prisma Studio
 ```
 
-CI (`.github/workflows/ci.yml`) runs `pnpm lint` and `pnpm test:run` on every push and pull request.
+### Test database (integration / join concurrency)
+
+```bash
+pnpm test:db:up       # Docker Postgres on port 5435 (timer_test)
+pnpm test:db:migrate  # Apply migrations to test DB
+pnpm test:integration
+pnpm test:db:down     # Stop test Postgres
+```
+
+Optional k6 load test: see [loadtests/README.md](./loadtests/README.md).
+
+CI (`.github/workflows/ci.yml`) runs `pnpm lint` and `pnpm test:run` (unit) on every push and pull request.
 
 ---
 

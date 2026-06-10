@@ -2,7 +2,7 @@ import { notFound } from 'next/navigation';
 import { ApiSandboxDashboard } from '@/components/developer/ApiSandboxDashboard';
 
 export const metadata = {
-  title: 'API Sandbox (Dev Only)',
+  title: 'API Sandbox',
   robots: { index: false, follow: false },
 };
 

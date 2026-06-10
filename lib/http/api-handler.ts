@@ -11,6 +11,7 @@ const ERROR_STATUS_MAP: Record<string, number> = {
   [JoinErrorCodes.DOMAIN_NOT_ALLOWED]: 403,
   [JoinErrorCodes.NO_ALLOWED_DOMAINS]: 403,
   [JoinErrorCodes.ALREADY_MEMBER]: 409,
+  [JoinErrorCodes.RATE_LIMITED]: 429,
   UNAUTHORIZED: 401,
   FORBIDDEN: 403,
   NO_ACTIVE_ORGANIZATION: 403,

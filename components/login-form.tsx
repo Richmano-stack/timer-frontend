@@ -100,9 +100,7 @@ export function LoginForm({
       <Card>
         <CardHeader>
           <CardTitle>Login to your account</CardTitle>
-          <CardDescription>
-            Enter your email below to login to your account
-          </CardDescription>
+          <CardDescription>Sign in to OmniShift</CardDescription>
         </CardHeader>
         <CardContent>
           <form onSubmit={handleSubmit}>

@@ -1,6 +1,7 @@
 import { auth } from '@/lib/auth';
 import { JoinErrorCodes } from '@/lib/errors/join';
 import { fail, ok } from '@/lib/http/api-handler';
+import { checkJoinMagicLinkRateLimit } from '@/lib/security/join-rate-limit';
 import { validateJoinEmail } from '@/lib/services/join.service';
 import { requestMagicLinkSchema } from '@/lib/validators/join';
 
@@ -18,6 +19,17 @@ export async function POST(request: Request) {
 
     const { email, orgSlug } = parsed.data;
     const normalizedEmail = email.trim().toLowerCase();
+
+    const rateLimit = checkJoinMagicLinkRateLimit(request, normalizedEmail);
+    if (!rateLimit.allowed) {
+      const retryAfterSeconds = Math.ceil(rateLimit.retryAfterMs / 1000);
+      const scopeLabel = rateLimit.scope === 'ip' ? 'this IP address' : 'this email address';
+      return fail(
+        JoinErrorCodes.RATE_LIMITED,
+        `Too many join attempts from ${scopeLabel}. Try again in ${retryAfterSeconds} seconds.`,
+        429
+      );
+    }
 
     const validation = await validateJoinEmail(orgSlug, normalizedEmail);
     if (!validation.success) {

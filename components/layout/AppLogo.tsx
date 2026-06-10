@@ -1,6 +1,7 @@
 'use client';
 
 import { useSidebar } from '@/components/ui/sidebar';
+import { BRAND_NAME } from '@/lib/constants/brand';
 import { motion } from 'motion/react';
 import Link from 'next/link';
 
@@ -21,7 +22,7 @@ export const Logo = () => {
         }}
         className="font-medium whitespace-pre text-foreground"
       >
-        TimeTracker
+        {BRAND_NAME}
       </motion.span>
     </Link>
   );

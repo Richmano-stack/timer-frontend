@@ -1,6 +1,8 @@
-# Architecture
+# Architecture — OmniShift
 
-Call-center time tracking built as a full-stack **Next.js** app with **Better Auth**, **Prisma**, and **PostgreSQL**. Employees clock in and switch activity statuses; admins monitor the floor in real time, export timesheets, and share a self-serve team join link.
+**OmniShift** is call-center time tracking built as a full-stack **Next.js** app with **Better Auth**, **Prisma**, and **PostgreSQL**. Employees clock in and switch activity statuses; admins monitor the floor in real time, export timesheets, and share a self-serve team join link.
+
+Brand constants live in `lib/constants/brand.ts` (`BRAND_NAME`, `BRAND_TAGLINE`, `brandPageTitle()`).
 
 Use this document to navigate the repo when something breaks: start at the **symptom layer** (UI → API → service → DB/auth).
 
@@ -328,7 +330,7 @@ Reusable shadcn-style building blocks: `button`, `input`, `card`, `field`, `Tabl
 | `fixtures/time-log.ts` | Shared org/user/segment fixtures for service tests |
 | `lib/**/__tests__/*.test.ts` | Vitest unit tests (time math, join, tracking, admin) |
 
-Run: `pnpm test` (watch) or `pnpm test:run` (CI). GitHub Actions runs lint + tests on every PR (`.github/workflows/ci.yml`).
+Run: `pnpm test` (watch), `pnpm test:run` (unit, CI), or `pnpm test:integration` (requires `pnpm test:db:up` + `pnpm test:db:migrate` against `docker-compose.test.yml` on port **5435**). Join concurrency and `request-magic-link` route tests live in the integration project. Optional k6 script: `loadtests/join-magic-link.k6.js`.
 
 ---
 
