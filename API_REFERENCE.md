@@ -1,7 +1,7 @@
 # API Reference — Timer Frontend
 
 > **Generated from static analysis of** `app/api/**/*` **and downstream service/validation layers.**  
-> **Last scanned:** 11 custom route handlers + Better Auth proxy  
+> **Last scanned:** 13 custom route handlers + Better Auth proxy  
 > **Base URL (local dev):** `http://localhost:3000`  
 > **See also:** [ARCHITECTURE.md](./ARCHITECTURE.md) for full system map and user journeys.
 
@@ -324,9 +324,9 @@ GET /api/time/my-day?userId=<memberId>&date=2026-06-10
     "activities": [],
     "timeline": [],
     "summary": {
-      "gross": "0.00",
-      "breaks": "0.00",
-      "net": "0.00"
+      "gross": "0m",
+      "breaks": "0m",
+      "net": "0.0h"
     }
   }
 }
@@ -516,6 +516,91 @@ Updates allowed email domains for employee self-serve join.
 
 Same shape as `GET /api/organization/join-settings`.
 
+Domains are **normalized on persist** (lowercase, `@` stripped). The response may echo the raw input array from the request body.
+
+---
+
+## GET /api/organization/team
+
+**Access:** Admin  
+**Service:** `getTeamForAdmin()` in `lib/services/organization-team.service.ts`
+
+Returns organization summary and member roster for the Team admin page. Replaces direct Better Auth `organization.getFullOrganization` calls from the client.
+
+### Success — `200 OK`
+
+```json
+{
+  "success": true,
+  "data": {
+    "id": "string",
+    "name": "Demo Company",
+    "slug": "demo-company",
+    "actorRole": "owner",
+    "members": [
+      {
+        "id": "member-uuid",
+        "role": "member",
+        "createdAt": "2026-06-10T12:00:00.000Z",
+        "user": {
+          "id": "user-uuid",
+          "name": "Jane Agent",
+          "email": "agent@example.com"
+        }
+      }
+    ]
+  }
+}
+```
+
+`actorRole` is the caller's role in the active organization (used by the UI to decide which role changes are allowed).
+
+---
+
+## PATCH /api/organization/members/[memberId]/role
+
+**Access:** Admin  
+**Service:** `updateMemberRoleForAdmin()` in `lib/services/organization-team.service.ts`
+
+Updates a member's role. Enforced server-side via `lib/organization/roles.ts`:
+
+- Only `owner` and `admin` may call this route
+- Assignable roles: `member`, `admin` (owners may assign both; admins may assign `member` only)
+- Cannot change an `owner` member's role
+- Admins cannot change another admin's role
+
+### Request body
+
+| Field | Type | Required | Notes |
+|-------|------|----------|-------|
+| `role` | `"member"` \| `"admin"` | **Required** | Target role |
+
+```json
+{
+  "role": "admin"
+}
+```
+
+### Success — `200 OK`
+
+```json
+{
+  "success": true,
+  "data": {
+    "memberId": "member-uuid",
+    "role": "admin"
+  }
+}
+```
+
+### Common errors
+
+| Code | Status | When |
+|------|--------|------|
+| `FORBIDDEN` | 403 | Actor cannot assign or edit this member's role |
+| `USER_NOT_IN_COMPANY` | 403 | Member not found in active org |
+| `VALIDATION_ERROR` | 400 | Invalid body |
+
 ---
 
 ## Join (public)
@@ -607,6 +692,8 @@ GET /api/auth/magic-link/verify?token=...&callbackURL=/join/{orgSlug}/complete
 | `GET` | `/api/admin/overview` | Admin | `getAdminOverviewService` |
 | `GET` | `/api/admin/timesheets` | Admin | `getTimesheetsService` |
 | `POST` | `/api/organization/bootstrap` | Admin | `seedDefaultActivityStatuses`, `initializeJoinMetadata` |
+| `GET` | `/api/organization/team` | Admin | `getTeamForAdmin` |
+| `PATCH` | `/api/organization/members/[memberId]/role` | Admin | `updateMemberRoleForAdmin` |
 | `GET` | `/api/organization/join-settings` | Admin | `getJoinSettingsForAdmin` |
 | `PATCH` | `/api/organization/join-settings` | Admin | `updateJoinSettings` |
 | `POST` | `/api/join/request-magic-link` | Public | `validateJoinEmail` + `signInMagicLink` |
@@ -666,6 +753,8 @@ curl -X POST http://localhost:3000/api/join/request-magic-link \
 | Time logic | `lib/services/time-tracking.service.ts` |
 | Admin logic | `lib/services/admin-dashboard.service.ts` |
 | Join logic | `lib/services/join.service.ts`, `lib/organization/metadata.ts` |
+| Team / roles | `lib/services/organization-team.service.ts`, `lib/organization/roles.ts` |
+| Tests | `vitest.config.ts`, `lib/**/__tests__/*.test.ts`, `test/fixtures/` |
 | Validation | `lib/validators/time-tracking.ts`, `admin.ts`, `join.ts` |
 | Error codes | `lib/errors/time-tracking.ts`, `lib/errors/join.ts` |
 | Client fetch | `lib/api.ts` |

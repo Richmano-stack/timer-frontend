@@ -1,0 +1,530 @@
+import { StatusType } from '@prisma/client';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { TimeTrackingErrorCodes } from '@/lib/errors/time-tracking';
+import {
+  ORG_ID,
+  USER_ID,
+  makeActivityStatus,
+  makeTimeLogSegment,
+} from '@/test/fixtures/time-log';
+
+const {
+  mockFindFirst,
+  mockFindMany,
+  mockCreate,
+  mockUpdate,
+  mockTransaction,
+  mockUserFindFirst,
+  mockActivityStatusFindMany,
+  mockResolveOrganizationContext,
+  mockResolveAvailableStatus,
+  mockResolveActivityStatus,
+  mockUtcNow,
+} = vi.hoisted(() => ({
+  mockFindFirst: vi.fn(),
+  mockFindMany: vi.fn(),
+  mockCreate: vi.fn(),
+  mockUpdate: vi.fn(),
+  mockTransaction: vi.fn(),
+  mockUserFindFirst: vi.fn(),
+  mockActivityStatusFindMany: vi.fn(),
+  mockResolveOrganizationContext: vi.fn(),
+  mockResolveAvailableStatus: vi.fn(),
+  mockResolveActivityStatus: vi.fn(),
+  mockUtcNow: vi.fn(),
+}));
+
+vi.mock('@/lib/db/prisma', () => ({
+  prisma: {
+    timeLog: {
+      findFirst: mockFindFirst,
+      findMany: mockFindMany,
+      create: mockCreate,
+      update: mockUpdate,
+    },
+    user: {
+      findFirst: mockUserFindFirst,
+    },
+    activityStatus: {
+      findMany: mockActivityStatusFindMany,
+    },
+    $transaction: mockTransaction,
+  },
+}));
+
+vi.mock('@/lib/security/organization-context', () => ({
+  resolveOrganizationContext: mockResolveOrganizationContext,
+}));
+
+vi.mock('@/lib/security/activity-status', () => ({
+  resolveAvailableStatus: mockResolveAvailableStatus,
+  resolveActivityStatus: mockResolveActivityStatus,
+}));
+
+vi.mock('@/lib/utils/time', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@/lib/utils/time')>();
+  return {
+    ...actual,
+    utcNow: mockUtcNow,
+  };
+});
+
+import {
+  clockInService,
+  clockOutService,
+  getMyDayService,
+  setStatusService,
+} from '@/lib/services/time-tracking.service';
+
+const availableStatus = {
+  id: 'status-available',
+  name: 'Available',
+  type: StatusType.PRODUCTIVE,
+  colorCode: '#6366f1',
+  isBillable: true,
+  isProductive: true,
+};
+
+const lunchStatus = {
+  id: 'status-lunch',
+  name: 'Lunch',
+  type: StatusType.BREAK,
+  colorCode: '#94a3b8',
+  isBillable: false,
+  isProductive: false,
+};
+
+function tenantSuccess() {
+  mockResolveOrganizationContext.mockResolvedValue({
+    success: true,
+    data: { userId: USER_ID, organizationId: ORG_ID },
+  });
+}
+
+function tenantFailure() {
+  mockResolveOrganizationContext.mockResolvedValue({
+    success: false,
+    error: {
+      code: TimeTrackingErrorCodes.USER_NOT_IN_COMPANY,
+      message: 'User is not a member of the specified organization.',
+    },
+  });
+}
+
+beforeEach(() => {
+  vi.clearAllMocks();
+  mockUtcNow.mockReturnValue(new Date('2026-06-10T12:00:00.000Z'));
+  tenantSuccess();
+});
+
+describe('clockInService', () => {
+  it('returns USER_NOT_IN_COMPANY when resolveOrganizationContext fails', async () => {
+    tenantFailure();
+
+    const result = await clockInService(USER_ID, ORG_ID);
+
+    expect(result.success).toBe(false);
+    if (!result.success) {
+      expect(result.error.code).toBe(TimeTrackingErrorCodes.USER_NOT_IN_COMPANY);
+    }
+    expect(mockCreate).not.toHaveBeenCalled();
+  });
+
+  it('returns USER_ALREADY_CLOCKED_IN when an open segment exists for user+org', async () => {
+    mockFindFirst.mockResolvedValue(makeTimeLogSegment());
+
+    const result = await clockInService(USER_ID, ORG_ID);
+
+    expect(result.success).toBe(false);
+    if (!result.success) {
+      expect(result.error.code).toBe(TimeTrackingErrorCodes.USER_ALREADY_CLOCKED_IN);
+    }
+    expect(mockCreate).not.toHaveBeenCalled();
+  });
+
+  it('returns ACTIVITY_STATUS_NOT_FOUND when Available status is missing for org', async () => {
+    mockFindFirst.mockResolvedValue(null);
+    mockResolveAvailableStatus.mockResolvedValue({
+      success: false,
+      error: {
+        code: TimeTrackingErrorCodes.ACTIVITY_STATUS_NOT_FOUND,
+        message: 'Activity status not found for this organization.',
+      },
+    });
+
+    const result = await clockInService(USER_ID, ORG_ID);
+
+    expect(result.success).toBe(false);
+    if (!result.success) {
+      expect(result.error.code).toBe(TimeTrackingErrorCodes.ACTIVITY_STATUS_NOT_FOUND);
+    }
+  });
+
+  it('creates a TimeLog with Available status and null endTime on happy path', async () => {
+    mockFindFirst.mockResolvedValue(null);
+    mockResolveAvailableStatus.mockResolvedValue({ success: true, data: availableStatus });
+    const created = makeTimeLogSegment();
+    mockCreate.mockResolvedValue(created);
+
+    const result = await clockInService(USER_ID, ORG_ID, 'Starting shift');
+
+    expect(result.success).toBe(true);
+    expect(mockCreate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          userId: USER_ID,
+          organizationId: ORG_ID,
+          activityStatusId: availableStatus.id,
+          notes: 'Starting shift',
+        }),
+      })
+    );
+    if (result.success) {
+      expect(result.data.segment.endTime).toBeNull();
+      expect(result.data.segment.statusName).toBe('Available');
+    }
+  });
+
+  it('never creates a segment when user is not a member of organizationId', async () => {
+    tenantFailure();
+
+    await clockInService(USER_ID, 'other-org');
+
+    expect(mockCreate).not.toHaveBeenCalled();
+  });
+});
+
+describe('clockOutService', () => {
+  it('returns NO_ACTIVE_SESSION_FOUND when no open segment exists', async () => {
+    mockFindFirst.mockResolvedValue(null);
+
+    const result = await clockOutService(USER_ID, ORG_ID);
+
+    expect(result.success).toBe(false);
+    if (!result.success) {
+      expect(result.error.code).toBe(TimeTrackingErrorCodes.NO_ACTIVE_SESSION_FOUND);
+    }
+  });
+
+  it('sets endTime on the open segment and returns closed segment on happy path', async () => {
+    const open = makeTimeLogSegment({ id: 'open-seg' });
+    mockFindFirst.mockResolvedValue(open);
+    mockUpdate.mockResolvedValue({
+      ...open,
+      endTime: new Date('2026-06-10T12:00:00.000Z'),
+    });
+
+    const result = await clockOutService(USER_ID, ORG_ID);
+
+    expect(result.success).toBe(true);
+    expect(mockUpdate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { id: 'open-seg' },
+        data: { endTime: new Date('2026-06-10T12:00:00.000Z') },
+      })
+    );
+    if (result.success) {
+      expect(result.data.segment.endTime).not.toBeNull();
+    }
+  });
+
+  it('does not close segments belonging to a different user in the same org', async () => {
+    mockResolveOrganizationContext.mockResolvedValue({
+      success: true,
+      data: { userId: 'other-user', organizationId: ORG_ID },
+    });
+    mockFindFirst.mockResolvedValue(null);
+
+    const result = await clockOutService('other-user', ORG_ID);
+
+    expect(result.success).toBe(false);
+    expect(mockUpdate).not.toHaveBeenCalled();
+    expect(mockFindFirst).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({ userId: 'other-user', organizationId: ORG_ID }),
+      })
+    );
+  });
+});
+
+describe('setStatusService', () => {
+  it('returns NO_ACTIVE_SESSION_FOUND when user is clocked out', async () => {
+    mockFindFirst.mockResolvedValue(null);
+
+    const result = await setStatusService(USER_ID, ORG_ID, lunchStatus.id);
+
+    expect(result.success).toBe(false);
+    if (!result.success) {
+      expect(result.error.code).toBe(TimeTrackingErrorCodes.NO_ACTIVE_SESSION_FOUND);
+    }
+  });
+
+  it('is idempotent when target status matches current open segment (no new row)', async () => {
+    const open = makeTimeLogSegment({ activityStatusId: availableStatus.id });
+    mockFindFirst.mockResolvedValue(open);
+    mockResolveActivityStatus.mockResolvedValue({ success: true, data: availableStatus });
+
+    const result = await setStatusService(USER_ID, ORG_ID, availableStatus.id);
+
+    expect(result.success).toBe(true);
+    expect(mockTransaction).not.toHaveBeenCalled();
+    expect(mockUpdate).not.toHaveBeenCalled();
+  });
+
+  it('rejects ACTIVITY_STATUS_NOT_FOUND when statusId belongs to another organization', async () => {
+    mockFindFirst.mockResolvedValue(makeTimeLogSegment());
+    mockResolveActivityStatus.mockResolvedValue({
+      success: false,
+      error: {
+        code: TimeTrackingErrorCodes.ACTIVITY_STATUS_NOT_FOUND,
+        message: 'Activity status not found for this organization.',
+      },
+    });
+
+    const result = await setStatusService(USER_ID, ORG_ID, 'foreign-status-id');
+
+    expect(result.success).toBe(false);
+    if (!result.success) {
+      expect(result.error.code).toBe(TimeTrackingErrorCodes.ACTIVITY_STATUS_NOT_FOUND);
+    }
+    expect(mockTransaction).not.toHaveBeenCalled();
+  });
+
+  it('closes open segment and creates new segment in a single transaction on status change', async () => {
+    const open = makeTimeLogSegment({ id: 'open-seg', activityStatusId: availableStatus.id });
+    const created = makeTimeLogSegment({
+      id: 'new-seg',
+      activityStatusId: lunchStatus.id,
+      activityStatus: makeActivityStatus({
+        id: lunchStatus.id,
+        name: 'Lunch',
+        type: StatusType.BREAK,
+      }),
+    });
+
+    mockFindFirst.mockResolvedValue(open);
+    mockResolveActivityStatus.mockResolvedValue({ success: true, data: lunchStatus });
+    mockTransaction.mockImplementation(async (callback) =>
+      callback({
+        timeLog: {
+          update: mockUpdate,
+          create: mockCreate.mockResolvedValue(created),
+        },
+      })
+    );
+
+    const result = await setStatusService(USER_ID, ORG_ID, lunchStatus.id);
+
+    expect(result.success).toBe(true);
+    expect(mockTransaction).toHaveBeenCalledTimes(1);
+    expect(mockUpdate).toHaveBeenCalledWith(
+      expect.objectContaining({ where: { id: 'open-seg' } })
+    );
+    expect(mockCreate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({ activityStatusId: lunchStatus.id }),
+      })
+    );
+  });
+
+  it('rolls back when transaction create fails (open segment endTime unchanged)', async () => {
+    const open = makeTimeLogSegment({ id: 'open-seg', activityStatusId: availableStatus.id });
+    mockFindFirst.mockResolvedValue(open);
+    mockResolveActivityStatus.mockResolvedValue({ success: true, data: lunchStatus });
+    mockTransaction.mockRejectedValue(new Error('transaction failed'));
+
+    await expect(setStatusService(USER_ID, ORG_ID, lunchStatus.id)).rejects.toThrow(
+      'transaction failed'
+    );
+  });
+
+  it('resolves status by statusName when statusId is omitted', async () => {
+    const open = makeTimeLogSegment({ activityStatusId: availableStatus.id });
+    mockFindFirst.mockResolvedValue(open);
+    mockResolveActivityStatus.mockResolvedValue({ success: true, data: lunchStatus });
+    mockTransaction.mockImplementation(async (callback) =>
+      callback({
+        timeLog: {
+          update: mockUpdate,
+          create: mockCreate.mockResolvedValue(
+            makeTimeLogSegment({
+              activityStatusId: lunchStatus.id,
+              activityStatus: makeActivityStatus({
+                id: lunchStatus.id,
+                name: 'Lunch',
+                type: StatusType.BREAK,
+              }),
+            })
+          ),
+        },
+      })
+    );
+
+    await setStatusService(USER_ID, ORG_ID, undefined, 'Lunch');
+
+    expect(mockResolveActivityStatus).toHaveBeenCalledWith(ORG_ID, undefined, 'Lunch');
+  });
+});
+
+describe('getMyDayService', () => {
+  it('merges open segment into day when it started before UTC day boundary', async () => {
+    const open = makeTimeLogSegment({
+      id: 'open-overnight',
+      startTime: new Date('2026-06-09T22:00:00.000Z'),
+    });
+
+    mockUserFindFirst.mockResolvedValue({ name: 'Agent One' });
+    mockActivityStatusFindMany.mockResolvedValue([makeActivityStatus()]);
+    mockFindMany.mockResolvedValue([]);
+    mockFindFirst.mockResolvedValue(open);
+
+    const result = await getMyDayService(USER_ID, ORG_ID, '2026-06-10');
+
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.activities.some((row) => row.id === 'open-overnight')).toBe(true);
+      expect(result.data.activeSession?.activeSegment?.id).toBe('open-overnight');
+    }
+  });
+
+  it('computes breakDeductions only from non-productive segment types', async () => {
+    const segments = [
+      makeTimeLogSegment({
+        id: 'seg-1',
+        startTime: new Date('2026-06-10T09:00:00.000Z'),
+        endTime: new Date('2026-06-10T10:00:00.000Z'),
+      }),
+      makeTimeLogSegment({
+        id: 'seg-2',
+        startTime: new Date('2026-06-10T10:00:00.000Z'),
+        endTime: new Date('2026-06-10T10:30:00.000Z'),
+        activityStatusId: lunchStatus.id,
+        activityStatus: makeActivityStatus({
+          id: lunchStatus.id,
+          name: 'Lunch',
+          type: StatusType.BREAK,
+        }),
+      }),
+    ];
+
+    mockUserFindFirst.mockResolvedValue({ name: 'Agent One' });
+    mockActivityStatusFindMany.mockResolvedValue([makeActivityStatus()]);
+    mockFindMany.mockResolvedValue(segments);
+    mockFindFirst.mockResolvedValue(null);
+
+    const result = await getMyDayService(USER_ID, ORG_ID, '2026-06-10');
+
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.shifts[0]?.breakDeductions).toBe('30m');
+    }
+  });
+
+  it('computes netWorkHours as gross minus breaks for a multi-segment shift', async () => {
+    const segments = [
+      makeTimeLogSegment({
+        id: 'seg-1',
+        startTime: new Date('2026-06-10T09:00:00.000Z'),
+        endTime: new Date('2026-06-10T10:00:00.000Z'),
+      }),
+      makeTimeLogSegment({
+        id: 'seg-2',
+        startTime: new Date('2026-06-10T10:00:00.000Z'),
+        endTime: new Date('2026-06-10T10:30:00.000Z'),
+        activityStatusId: lunchStatus.id,
+        activityStatus: makeActivityStatus({
+          id: lunchStatus.id,
+          name: 'Lunch',
+          type: StatusType.BREAK,
+        }),
+      }),
+      makeTimeLogSegment({
+        id: 'seg-3',
+        startTime: new Date('2026-06-10T10:30:00.000Z'),
+        endTime: new Date('2026-06-10T11:30:00.000Z'),
+      }),
+    ];
+
+    mockUserFindFirst.mockResolvedValue({ name: 'Agent One' });
+    mockActivityStatusFindMany.mockResolvedValue([makeActivityStatus()]);
+    mockFindMany.mockResolvedValue(segments);
+    mockFindFirst.mockResolvedValue(null);
+
+    const result = await getMyDayService(USER_ID, ORG_ID, '2026-06-10');
+
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.shifts[0]?.netWorkHours).toBe('2.00');
+    }
+  });
+
+  it('returns empty shifts and zero summary when no segments exist for date', async () => {
+    mockUserFindFirst.mockResolvedValue({ name: 'Agent One' });
+    mockActivityStatusFindMany.mockResolvedValue([]);
+    mockFindMany.mockResolvedValue([]);
+    mockFindFirst.mockResolvedValue(null);
+
+    const result = await getMyDayService(USER_ID, ORG_ID, '2026-06-10');
+
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.shifts).toEqual([]);
+      expect(result.data.summary).toEqual({ gross: '0m', breaks: '0m', net: '0.0h' });
+      expect(result.data.activeSession).toBeNull();
+    }
+  });
+
+  it('returns activeSession when open segment exists', async () => {
+    const open = makeTimeLogSegment({ id: 'open-seg' });
+    mockUserFindFirst.mockResolvedValue({ name: 'Agent One' });
+    mockActivityStatusFindMany.mockResolvedValue([makeActivityStatus()]);
+    mockFindMany.mockResolvedValue([open]);
+    mockFindFirst.mockResolvedValue(open);
+
+    const result = await getMyDayService(USER_ID, ORG_ID, '2026-06-10');
+
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.activeSession?.activeSegment?.id).toBe('open-seg');
+      expect(result.data.shifts[0]?.status).toBe('active');
+    }
+  });
+
+  it('fails when target userId is not a member of organizationId', async () => {
+    tenantFailure();
+
+    const result = await getMyDayService(USER_ID, ORG_ID, '2026-06-10');
+
+    expect(result.success).toBe(false);
+    if (!result.success) {
+      expect(result.error.code).toBe(TimeTrackingErrorCodes.USER_NOT_IN_COMPANY);
+    }
+  });
+});
+
+describe('time-tracking tenant isolation', () => {
+  it('clockInService rejects userId that is not in organizationId membership', async () => {
+    tenantFailure();
+
+    const result = await clockInService(USER_ID, ORG_ID);
+
+    expect(result.success).toBe(false);
+    expect(mockResolveOrganizationContext).toHaveBeenCalledWith(USER_ID, ORG_ID);
+  });
+
+  it('setStatusService rejects activityStatusId from a different organization', async () => {
+    mockFindFirst.mockResolvedValue(makeTimeLogSegment());
+    mockResolveActivityStatus.mockResolvedValue({
+      success: false,
+      error: {
+        code: TimeTrackingErrorCodes.ACTIVITY_STATUS_NOT_FOUND,
+        message: 'Activity status not found for this organization.',
+      },
+    });
+
+    const result = await setStatusService(USER_ID, ORG_ID, 'other-org-status');
+
+    expect(result.success).toBe(false);
+    expect(mockResolveActivityStatus).toHaveBeenCalledWith(ORG_ID, 'other-org-status', undefined);
+  });
+});

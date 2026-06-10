@@ -3,6 +3,7 @@ import { TimeTrackingErrorCodes } from '@/lib/errors/time-tracking';
 import {
   resolveAdminSessionContext,
   resolveSessionContext,
+  type SessionContext,
 } from '@/lib/security/session-context';
 import { ServiceResult } from '@/lib/types/api-response';
 
@@ -21,7 +22,7 @@ export async function executeAuthenticatedRoute<T>(
 
 export async function executeAdminRoute<T>(
   request: Request,
-  handler: (ctx: { userId: string; organizationId: string }) => Promise<ServiceResult<T>>
+  handler: (ctx: SessionContext) => Promise<ServiceResult<T>>
 ) {
   const contextResult = await resolveAdminSessionContext(request);
   if (!contextResult.success) {

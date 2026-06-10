@@ -73,7 +73,7 @@ export function OnboardingForm({
 
       await api.post<{ seeded: number }>('/api/organization/bootstrap');
 
-      router.replace('/billing/checkout');
+      router.replace('/admin/overview');
       router.refresh();
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to create organization.');
