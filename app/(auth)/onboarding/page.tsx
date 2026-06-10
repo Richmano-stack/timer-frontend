@@ -24,7 +24,7 @@ export default async function OnboardingPage() {
 
     const { role } = await getActiveMemberRole();
     if (isAdminRole(role)) {
-      redirect('/billing/checkout');
+      redirect('/admin/overview');
     }
     redirect('/employee/track');
   }

@@ -5,6 +5,7 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import { FormEvent, useState } from 'react';
 import { AuthBrand } from '@/components/auth-brand';
 import { authClient } from '@/lib/auth-client';
+import { isAdminRole } from '@/lib/organization/roles';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import {
@@ -23,10 +24,6 @@ import {
 import { Input } from '@/components/ui/input';
 
 const IS_DEV = process.env.NODE_ENV === 'development';
-
-function isAdminRole(role: string | undefined | null): boolean {
-  return role === 'owner' || role === 'admin';
-}
 
 export function LoginForm({
   className,

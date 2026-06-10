@@ -171,11 +171,10 @@ export function TimeCardDashboard() {
 
   const display = getEmployeeDisplayStatus(session);
 
-  useEffect(() => {
-    if (!error) return;
-    setToast({ message: error, code: errorCode, variant: 'error' });
-    clearError();
-  }, [error, errorCode, clearError]);
+  const errorToast: ToastState | null = error
+    ? { message: error, code: errorCode, variant: 'error' }
+    : null;
+  const activeToast = toast ?? errorToast;
 
   const showSuccess = useCallback((message: string) => {
     setToast({ message, variant: 'success' });
@@ -251,13 +250,19 @@ export function TimeCardDashboard() {
         isSubmitting={isSubmitting}
       />
 
-      {toast && (
+      {activeToast && (
         <ToastStack>
           <Toast
-            message={toast.message}
-            code={toast.code}
-            variant={toast.variant}
-            onDismiss={() => setToast(null)}
+            message={activeToast.message}
+            code={activeToast.code}
+            variant={activeToast.variant}
+            onDismiss={() => {
+              if (toast) {
+                setToast(null);
+              } else {
+                clearError();
+              }
+            }}
           />
         </ToastStack>
       )}

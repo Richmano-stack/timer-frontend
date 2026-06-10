@@ -33,7 +33,6 @@ import {
   TableShell,
 } from '@/components/ui/Table';
 import { Toast, ToastStack } from '@/components/ui/Toast';
-import { authClient } from '@/lib/auth-client';
 import { api, ApiError } from '@/lib/api';
 import { normalizeDomain } from '@/lib/organization/metadata';
 import {
@@ -58,10 +57,11 @@ interface OrgMember {
   user: OrgUser;
 }
 
-interface FullOrganization {
+interface TeamResponse {
   id: string;
   name: string;
   slug: string;
+  actorRole: string;
   members: OrgMember[];
 }
 
@@ -164,7 +164,7 @@ function CopyJoinLinkButton({ joinUrl }: { joinUrl: string }) {
 }
 
 export function TeamInviteDashboard() {
-  const [organization, setOrganization] = useState<FullOrganization | null>(null);
+  const [organization, setOrganization] = useState<TeamResponse | null>(null);
   const [joinSettings, setJoinSettings] = useState<JoinSettings | null>(null);
   const [domainInput, setDomainInput] = useState('');
   const [allowedDomains, setAllowedDomains] = useState<string[]>([]);
@@ -176,27 +176,15 @@ export function TeamInviteDashboard() {
   const [updatingMemberId, setUpdatingMemberId] = useState<string | null>(null);
 
   const loadData = useCallback(async () => {
-    const [orgResult, settings, activeRole] = await Promise.all([
-      authClient.organization.getFullOrganization(),
+    const [team, settings] = await Promise.all([
+      api.get<TeamResponse>('/api/organization/team'),
       api.get<JoinSettings>('/api/organization/join-settings'),
-      authClient.organization.getActiveMemberRole(),
     ]);
 
-    if (orgResult.error) {
-      setToast({
-        message: orgResult.error.message ?? 'Failed to load team data',
-        variant: 'error',
-      });
-      return;
-    }
-
-    if (orgResult.data) {
-      setOrganization(orgResult.data as FullOrganization);
-    }
-
+    setOrganization(team);
+    setActorRole(team.actorRole);
     setJoinSettings(settings);
     setAllowedDomains(settings.allowedDomains);
-    setActorRole(activeRole.data?.role ?? null);
   }, []);
 
   useEffect(() => {
@@ -251,24 +239,16 @@ export function TeamInviteDashboard() {
     setUpdatingMemberId(memberId);
 
     try {
-      const result = await authClient.organization.updateMemberRole({
-        memberId,
-        role,
-      });
-
-      if (result.error) {
-        setToast({
-          message: result.error.message ?? 'Failed to update role',
-          variant: 'error',
-        });
-        return;
-      }
+      await api.patch<{ memberId: string; role: string }>(
+        `/api/organization/members/${memberId}/role`,
+        { role }
+      );
 
       setToast({ message: `Role updated to ${ROLE_LABELS[role]}.`, variant: 'success' });
       await loadData();
     } catch (err) {
       setToast({
-        message: err instanceof Error ? err.message : 'Failed to update role',
+        message: err instanceof ApiError ? err.message : 'Failed to update role',
         variant: 'error',
       });
     } finally {

@@ -9,6 +9,8 @@
     "prebuild": "prisma generate",
     "start": "next start",
     "lint": "eslint",
+    "test": "vitest",
+    "test:run": "vitest run",
     "db:up": "docker compose up -d",
     "db:down": "docker compose down",
     "db:generate": "prisma generate",
@@ -49,6 +51,7 @@
     "prisma": "^6.19.0",
     "tailwindcss": "^4",
     "tsx": "^4.21.0",
-    "typescript": "^5"
+    "typescript": "^5",
+    "vitest": "^4.0.18"
   }
 }

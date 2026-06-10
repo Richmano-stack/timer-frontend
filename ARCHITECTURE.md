@@ -38,7 +38,7 @@ Prisma  →  PostgreSQL
 |------|----------------|
 | **Owner / Admin** | `/admin/overview`, `/admin/reports`, `/admin/team` |
 | **Member (agent)** | `/employee/track` |
-| **New owner** | `/register` → `/onboarding` → `/billing/checkout` |
+| **New owner** | `/register` → `/onboarding` → `/admin/overview` |
 | **New employee** | `/join/{orgSlug}` (magic link, no password) |
 
 ---
@@ -81,9 +81,10 @@ Session context is resolved in `lib/security/session-context.ts` from the Better
   → POST /api/organization/bootstrap
        → seed default activity statuses
        → initialize join metadata (allowedDomains from owner email)
-/billing/checkout (placeholder)
   → /admin/overview
 ```
+
+Billing (`/billing/checkout`) is a placeholder and is **not** part of the onboarding path today.
 
 ### Employee self-serve join
 
@@ -129,6 +130,8 @@ Org isolation: the organization is always resolved from **`orgSlug` in the URL**
 
 /admin/team
   → components/admin/TeamInviteDashboard.tsx
+  → GET /api/organization/team
+  → PATCH /api/organization/members/[memberId]/role
   → GET/PATCH /api/organization/join-settings
 ```
 
@@ -160,7 +163,8 @@ Org isolation: the organization is always resolved from **`orgSlug` in the URL**
 
 | File | Purpose |
 |------|---------|
-| `app/(dashboard)/admin/layout.tsx` | Redirects `member` role away from admin routes |
+| `app/(dashboard)/admin/layout.tsx` | Admin role guard + wraps pages in `AdminShell` sidebar |
+| `components/layout/AdminShell.tsx` | Persistent admin nav (Floor Monitor, Reports, Team) |
 | `app/layout.tsx` | Root HTML shell |
 | `app/globals.css` | Global styles / theme |
 
@@ -176,6 +180,8 @@ Org isolation: the organization is always resolved from **`orgSlug` in the URL**
 | `GET /api/admin/overview` | `app/api/admin/overview/route.ts` | Floor monitor data |
 | `GET /api/admin/timesheets` | `app/api/admin/timesheets/route.ts` | Date-range timesheets |
 | `POST /api/organization/bootstrap` | `app/api/organization/bootstrap/route.ts` | Seed statuses + join metadata |
+| `GET /api/organization/team` | `app/api/organization/team/route.ts` | Org members + actor role (admin) |
+| `PATCH /api/organization/members/[memberId]/role` | `app/api/organization/members/[memberId]/role/route.ts` | Change member role (admin) |
 | `GET/PATCH /api/organization/join-settings` | `app/api/organization/join-settings/route.ts` | Allowed domains + join URL |
 | `POST /api/join/request-magic-link` | `app/api/join/request-magic-link/route.ts` | Domain check + send magic link |
 
@@ -262,12 +268,14 @@ Reusable shadcn-style building blocks: `button`, `input`, `card`, `field`, `Tabl
 | `services/admin-dashboard.service.ts` | Floor overview, compliance alerts, timesheets |
 | `services/join.service.ts` | Join by slug, domain validation, member creation, join settings |
 | `services/organization-bootstrap.service.ts` | Seed default activity statuses |
+| `services/organization-team.service.ts` | Team roster + role updates for admin UI |
 
-#### Organization join config
+#### Organization
 
 | File | Purpose |
 |------|---------|
-| `organization/metadata.ts` | Parse/serialize `allowedDomains` and `joinToken` in `Organization.metadata` |
+| `organization/metadata.ts` | Parse/serialize `allowedDomains` in `Organization.metadata` |
+| `organization/roles.ts` | Role helpers: `isAdminRole`, `canAssignRole`, `canEditMemberRole` |
 
 #### Validators (Zod)
 
@@ -276,6 +284,7 @@ Reusable shadcn-style building blocks: `button`, `input`, `card`, `field`, `Tabl
 | `validators/time-tracking.ts` | Time API request/query schemas |
 | `validators/admin.ts` | Admin API schemas |
 | `validators/join.ts` | Join + domain settings schemas |
+| `validators/organization.ts` | Team role update schema |
 
 #### Errors
 
@@ -296,7 +305,6 @@ Reusable shadcn-style building blocks: `button`, `input`, `card`, `field`, `Tabl
 | `utils/admin-metrics.ts` | Durations, CSV export, date ranges |
 | `utils/floor-filters.ts` | Admin floor table filters |
 | `utils/org-slug.ts` | Company name → URL slug |
-| `utils/join-link.ts` | Build `/join/{slug}` URL |
 | `utils.ts` | `cn()` classname helper |
 
 #### Constants
@@ -311,11 +319,16 @@ Reusable shadcn-style building blocks: `button`, `input`, `card`, `field`, `Tabl
 |------|---------|
 | `developer/sandbox-endpoints.ts` | Endpoint catalog for dev sandbox |
 
-#### Legacy (unused)
+---
 
-| File | Note |
-|------|------|
-| `invitations/resolve-invitation-token.ts` | Old per-email invite flow; no longer imported — safe to delete |
+### `test/` — automated tests
+
+| File | Purpose |
+|------|---------|
+| `fixtures/time-log.ts` | Shared org/user/segment fixtures for service tests |
+| `lib/**/__tests__/*.test.ts` | Vitest unit tests (time math, join, tracking, admin) |
+
+Run: `pnpm test` (watch) or `pnpm test:run` (CI). GitHub Actions runs lint + tests on every PR (`.github/workflows/ci.yml`).
 
 ---
 
@@ -343,7 +356,7 @@ User
   └── Member ── Organization
                     ├── ActivityStatus  (per-org status definitions)
                     ├── TimeLog         (clock segments; open segment = endTime null)
-                    └── metadata (JSON: allowedDomains, joinToken)
+                    └── metadata (JSON: allowedDomains)
 
 Better Auth tables: Session, Account, Verification, Invitation
 ```
@@ -391,24 +404,17 @@ Local Postgres: `docker compose up -d` (port **5434**).
 
 ---
 
-## Stale docs (do not trust without verifying)
-
-| File | Issue |
-|------|-------|
-| `README.md` | References Express backend; outdated |
-| `API_REFERENCE.md` | Describes old client-supplied identity model |
-| `status-sync-investigation.md` | Pre–Better Auth refactor notes |
-
-When in doubt, trust this file and the code under `app/api/` and `lib/services/`.
-
----
-
 ## Scripts
 
 ```bash
 pnpm dev          # Start dev server
+pnpm lint         # ESLint
+pnpm test         # Vitest (watch)
+pnpm test:run     # Vitest (single run, used in CI)
 pnpm db:up        # Start Postgres (Docker)
 pnpm db:migrate   # Apply Prisma migrations
 pnpm db:seed      # Seed demo org + user
 pnpm db:studio    # Prisma Studio
 ```
+
+See [API_REFERENCE.md](./API_REFERENCE.md) for endpoint-level detail.

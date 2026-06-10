@@ -1,18 +1,15 @@
 import { auth } from '@/lib/auth';
 import { prisma } from '@/lib/db/prisma';
 import { fail, TimeTrackingErrorCodes } from '@/lib/errors/time-tracking';
+import { isAdminRole } from '@/lib/organization/roles';
 import { ServiceResult } from '@/lib/types/api-response';
+
+export { isAdminRole };
 
 export interface SessionContext {
   userId: string;
   organizationId: string;
   memberRole: string;
-}
-
-const ADMIN_ROLES = new Set(['owner', 'admin']);
-
-export function isAdminRole(role: string): boolean {
-  return ADMIN_ROLES.has(role);
 }
 
 export async function resolveSessionContext(

@@ -28,6 +28,16 @@ export function assignableRolesForActor(actorRole: string): OrganizationRole[] {
   return [];
 }
 
+export function isAdminRole(role: string | undefined | null): boolean {
+  if (!role) return false;
+  const primary = primaryRole(role);
+  return primary === 'owner' || primary === 'admin';
+}
+
+export function canAssignRole(actorRole: string, newRole: OrganizationRole): boolean {
+  return assignableRolesForActor(actorRole).includes(newRole);
+}
+
 export function canEditMemberRole(actorRole: string, targetRole: string): boolean {
   const actor = primaryRole(actorRole);
   const target = primaryRole(targetRole);

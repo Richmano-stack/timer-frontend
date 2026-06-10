@@ -5,6 +5,7 @@ import {
   getActiveMemberRole,
   getServerSession,
 } from '@/lib/auth/server-session';
+import { isAdminRole } from '@/lib/organization/roles';
 
 export default async function AdminLayout({
   children,
@@ -23,7 +24,7 @@ export default async function AdminLayout({
 
   const { role } = await getActiveMemberRole();
 
-  if (role === 'member') {
+  if (!isAdminRole(role)) {
     redirect('/employee/track');
   }
 
