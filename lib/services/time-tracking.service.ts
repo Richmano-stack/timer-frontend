@@ -12,7 +12,7 @@ import {
   formatDurationHours,
   formatTimeLocal,
 } from '@/lib/utils/admin-metrics';
-import { AVAILABLE_STATUS_NAME, isProductiveType } from '@/lib/utils/status-type';
+import { isProductiveType } from '@/lib/utils/status-type';
 import {
   computeDaySummaryFromSegments,
   segmentDurationMs,

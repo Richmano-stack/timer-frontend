@@ -1,8 +1,15 @@
 'use client';
 
-import Link from 'next/link';
 import { useCallback, useState } from 'react';
-import { DashboardHeader } from '@/components/ui/DashboardHeader';
+import { DatePicker } from '@/components/ui/date-picker';
+import { Button } from '@/components/ui/button';
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/Skeleton';
 import {
   Table,
@@ -12,7 +19,6 @@ import {
   TableHead,
   TableHeaderCell,
   TableRow,
-  TableSectionTitle,
   TableShell,
 } from '@/components/ui/Table';
 import { Toast, ToastStack } from '@/components/ui/Toast';
@@ -25,8 +31,11 @@ import {
 } from '@/lib/utils/admin-metrics';
 import { TimesheetRow, TimesheetsResponse } from '@/types/admin-dashboard';
 
-const inputClassName =
-  'rounded-lg border border-border bg-card px-3 py-2 text-sm text-foreground outline-none focus:ring-2 focus:ring-brand-accent/30';
+function parseIsoDate(value: string): Date | undefined {
+  const [year, month, day] = value.split('-').map(Number);
+  if (!year || !month || !day) return undefined;
+  return new Date(year, month - 1, day);
+}
 
 function TableSkeleton() {
   return (
@@ -45,6 +54,9 @@ export function AdminReportsDashboard() {
   const [timesheetsLoaded, setTimesheetsLoaded] = useState(false);
   const [isExporting, setIsExporting] = useState(false);
   const [toast, setToast] = useState<{ message: string; code?: string | null } | null>(null);
+
+  const startDate = parseIsoDate(dateRange.startDate);
+  const endDate = parseIsoDate(dateRange.endDate);
 
   const fetchTimesheets = useCallback(async () => {
     const params = new URLSearchParams({
@@ -102,111 +114,121 @@ export function AdminReportsDashboard() {
     }
   }, [dateRange, fetchTimesheets, timesheetRows, timesheetsLoaded]);
 
+  const handleStartDateChange = (startDateValue: string) => {
+    setTimesheetsLoaded(false);
+    setDateRange((prev) => {
+      const next = { ...prev, startDate: startDateValue };
+      if (startDateValue > prev.endDate) {
+        next.endDate = startDateValue;
+      }
+      return next;
+    });
+  };
+
+  const handleEndDateChange = (endDateValue: string) => {
+    setTimesheetsLoaded(false);
+    setDateRange((prev) => {
+      const next = { ...prev, endDate: endDateValue };
+      if (endDateValue < prev.startDate) {
+        next.startDate = endDateValue;
+      }
+      return next;
+    });
+  };
+
   return (
-    <div className="min-h-screen bg-background text-foreground">
+    <div className="h-full min-h-0 overflow-y-auto bg-background text-foreground">
       <div className="mx-auto max-w-6xl px-6 py-8">
-        <DashboardHeader
-          eyebrow="Organization Admin"
-          title="Reports & Export"
-          subtitle="Timesheet review and CSV export for payroll and compliance"
-          actions={
-            <Link
-              href="/admin/overview"
-              className="rounded-lg border border-border bg-background px-4 py-2 text-sm font-semibold text-foreground transition hover:bg-brand-accent/10 hover:text-indigo-600 dark:hover:text-indigo-400"
-            >
-              Back to Floor Monitor
-            </Link>
-          }
-        />
+        <div className="mb-8">
+          <p className="text-xs font-semibold uppercase tracking-[0.3em] text-muted-foreground">
+            Organization
+          </p>
+          <h1 className="mt-1 text-2xl font-bold tracking-tight">Reports</h1>
+          <p className="mt-2 text-sm text-muted-foreground">
+            Timesheet review and CSV export for payroll and compliance
+          </p>
+        </div>
 
-        <section>
-          <TableSectionTitle title="Timesheets" />
-          <div className="mb-4 flex flex-col gap-4 rounded-lg border border-border bg-card p-4 sm:flex-row sm:flex-wrap sm:items-end">
-            <div>
-              <label className="mb-1 block text-xs font-semibold uppercase tracking-widest text-muted-foreground">
-                Start Date
-              </label>
-              <input
-                type="date"
+        <Card className="mb-6">
+          <CardHeader>
+            <CardTitle>Timesheets</CardTitle>
+            <CardDescription>Select a date range, then load or export records</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="flex flex-col gap-4 sm:flex-row sm:flex-wrap sm:items-end">
+              <DatePicker
+                id="start-date"
+                label="Start date"
                 value={dateRange.startDate}
-                onChange={(event) => {
-                  setTimesheetsLoaded(false);
-                  setDateRange((prev) => ({ ...prev, startDate: event.target.value }));
-                }}
-                className={inputClassName}
+                onChange={handleStartDateChange}
+                toDate={endDate}
+                disabled={timesheetsLoading || isExporting}
               />
-            </div>
-            <div>
-              <label className="mb-1 block text-xs font-semibold uppercase tracking-widest text-muted-foreground">
-                End Date
-              </label>
-              <input
-                type="date"
+              <DatePicker
+                id="end-date"
+                label="End date"
                 value={dateRange.endDate}
-                onChange={(event) => {
-                  setTimesheetsLoaded(false);
-                  setDateRange((prev) => ({ ...prev, endDate: event.target.value }));
-                }}
-                className={inputClassName}
+                onChange={handleEndDateChange}
+                fromDate={startDate}
+                disabled={timesheetsLoading || isExporting}
               />
+              <Button
+                type="button"
+                onClick={handleLoadTimesheets}
+                disabled={timesheetsLoading}
+              >
+                {timesheetsLoading ? 'Loading…' : 'Load'}
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={handleExport}
+                disabled={isExporting}
+              >
+                {isExporting ? 'Exporting…' : 'Export CSV'}
+              </Button>
             </div>
-            <button
-              type="button"
-              onClick={handleLoadTimesheets}
-              disabled={timesheetsLoading}
-              className="rounded-lg bg-brand-accent px-5 py-2 text-sm font-semibold text-white transition hover:opacity-90 disabled:opacity-50"
-            >
-              {timesheetsLoading ? 'Loading…' : 'Load'}
-            </button>
-            <button
-              type="button"
-              onClick={handleExport}
-              disabled={isExporting}
-              className="rounded-lg border border-border bg-background px-5 py-2 text-sm font-semibold text-foreground transition hover:bg-brand-accent/10 disabled:opacity-50"
-            >
-              {isExporting ? 'Exporting…' : 'Export CSV'}
-            </button>
-          </div>
+          </CardContent>
+        </Card>
 
-          <TableShell>
-            {timesheetsLoading ? (
-              <TableSkeleton />
-            ) : (
-              <Table minWidth="720px">
-                <TableHead>
-                  <TableHeaderCell>Date</TableHeaderCell>
-                  <TableHeaderCell>Employee</TableHeaderCell>
-                  <TableHeaderCell>Clock In</TableHeaderCell>
-                  <TableHeaderCell>Clock Out</TableHeaderCell>
-                  <TableHeaderCell>Break Deductions</TableHeaderCell>
-                  <TableHeaderCell>Net Hours</TableHeaderCell>
-                </TableHead>
-                <TableBody>
-                  {timesheetsLoaded && timesheetRows.length > 0 ? (
-                    timesheetRows.map((row) => (
-                      <TableRow key={row.timeLogId}>
-                        <TableCell>{formatDateLocal(row.clockIn)}</TableCell>
-                        <TableCell className="font-medium">{row.employeeName}</TableCell>
-                        <TableCell>{row.clockInFormatted}</TableCell>
-                        <TableCell>{row.clockOutFormatted}</TableCell>
-                        <TableCell>{row.breakDeductions}</TableCell>
-                        <TableCell className="font-mono tabular-nums">{row.netWorkHours}</TableCell>
-                      </TableRow>
-                    ))
-                  ) : (
-                    <TableEmptyState
-                      message={
-                        timesheetsLoaded
-                          ? 'No timesheet records for this date range.'
-                          : 'Select a date range and click Load to view timesheets.'
-                      }
-                    />
-                  )}
-                </TableBody>
-              </Table>
-            )}
-          </TableShell>
-        </section>
+        <TableShell>
+          {timesheetsLoading ? (
+            <TableSkeleton />
+          ) : (
+            <Table minWidth="720px">
+              <TableHead>
+                <TableHeaderCell>Date</TableHeaderCell>
+                <TableHeaderCell>Employee</TableHeaderCell>
+                <TableHeaderCell>Clock In</TableHeaderCell>
+                <TableHeaderCell>Clock Out</TableHeaderCell>
+                <TableHeaderCell>Break Deductions</TableHeaderCell>
+                <TableHeaderCell>Net Hours</TableHeaderCell>
+              </TableHead>
+              <TableBody>
+                {timesheetsLoaded && timesheetRows.length > 0 ? (
+                  timesheetRows.map((row) => (
+                    <TableRow key={row.timeLogId}>
+                      <TableCell>{formatDateLocal(row.clockIn)}</TableCell>
+                      <TableCell className="font-medium">{row.employeeName}</TableCell>
+                      <TableCell>{row.clockInFormatted}</TableCell>
+                      <TableCell>{row.clockOutFormatted}</TableCell>
+                      <TableCell>{row.breakDeductions}</TableCell>
+                      <TableCell className="font-mono tabular-nums">{row.netWorkHours}</TableCell>
+                    </TableRow>
+                  ))
+                ) : (
+                  <TableEmptyState
+                    message={
+                      timesheetsLoaded
+                        ? 'No timesheet records for this date range.'
+                        : 'Select a date range and click Load to view timesheets.'
+                    }
+                  />
+                )}
+              </TableBody>
+            </Table>
+          )}
+        </TableShell>
       </div>
 
       {toast && (

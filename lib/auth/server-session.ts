@@ -23,10 +23,3 @@ export async function setActiveOrganization(organizationId: string) {
 export function isAdminRole(role: string | undefined | null): boolean {
   return role === 'owner' || role === 'admin';
 }
-
-export function redirectPathForRole(role: string | undefined | null): string {
-  if (isAdminRole(role)) {
-    return '/admin/overview';
-  }
-  return '/employee/track';
-}

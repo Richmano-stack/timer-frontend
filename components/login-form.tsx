@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { FormEvent, useEffect, useState } from 'react';
+import { FormEvent, useState } from 'react';
 import { AuthBrand } from '@/components/auth-brand';
 import { authClient } from '@/lib/auth-client';
 import { cn } from '@/lib/utils';
@@ -28,29 +28,18 @@ function isAdminRole(role: string | undefined | null): boolean {
   return role === 'owner' || role === 'admin';
 }
 
-interface LoginFormProps extends React.ComponentProps<'div'> {
-  initialError?: string | null;
-}
-
 export function LoginForm({
   className,
-  initialError,
   ...props
-}: LoginFormProps) {
+}: React.ComponentProps<'div'>) {
   const router = useRouter();
   const searchParams = useSearchParams();
   const nextPath = searchParams.get('next');
 
   const [email, setEmail] = useState(IS_DEV ? 'demo@example.com' : '');
   const [password, setPassword] = useState(IS_DEV ? 'DemoPassword1!' : '');
-  const [error, setError] = useState<string | null>(initialError ?? null);
+  const [error, setError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
-
-  useEffect(() => {
-    if (initialError) {
-      setError(initialError);
-    }
-  }, [initialError]);
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
