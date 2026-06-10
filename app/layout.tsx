@@ -1,5 +1,7 @@
 import type { Metadata } from 'next';
 import { Inter } from 'next/font/google';
+import { ThemeProvider } from '@/components/theme-provider';
+import { ThemeToggleSlot } from '@/components/theme-toggle-slot';
 import { BRAND_NAME, BRAND_TAGLINE } from '@/lib/constants/brand';
 import './globals.css';
 
@@ -19,9 +21,12 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en" className="dark">
+    <html lang="en" suppressHydrationWarning>
       <body className={`${inter.className} min-h-screen bg-background text-foreground antialiased`}>
-        {children}
+        <ThemeProvider attribute="class" defaultTheme="dark" enableSystem={false}>
+          <ThemeToggleSlot />
+          {children}
+        </ThemeProvider>
       </body>
     </html>
   );
