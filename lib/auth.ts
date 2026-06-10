@@ -1,5 +1,6 @@
 import { betterAuth } from 'better-auth/minimal';
 import { prismaAdapter } from 'better-auth/adapters/prisma';
+import { magicLink } from 'better-auth/plugins';
 import { organization } from 'better-auth/plugins';
 import { prisma } from '@/lib/db/prisma';
 
@@ -13,18 +14,17 @@ export const auth = betterAuth({
     enabled: true,
   },
   plugins: [
-    organization({
-      allowUserToCreateOrganization: true,
-      async sendInvitationEmail(data) {
-        const baseUrl = process.env.NEXT_PUBLIC_APP_URL ?? 'http://localhost:3000';
-        const inviteLink = `${baseUrl}/register?token=${data.id}`;
-
-        console.info('[organization] Invitation email stub', {
+    magicLink({
+      async sendMagicLink(data) {
+        console.info('[magic-link] Sign-in link stub', {
           to: data.email,
-          organization: data.organization.name,
-          inviteLink,
+          url: data.url,
+          metadata: data.metadata,
         });
       },
+    }),
+    organization({
+      allowUserToCreateOrganization: true,
     }),
   ],
 });

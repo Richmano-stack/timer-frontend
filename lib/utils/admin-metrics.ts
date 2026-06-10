@@ -1,35 +1,5 @@
-export interface SessionMetrics {
-  breakMs: number;
-  netMs: number;
-  grossMs: number;
-}
-
-export function computeSessionMetrics(
-  clockInIso: string,
-  clockOutIso: string | null,
-  breaks: { startTime: string; endTime: string | null }[]
-): SessionMetrics {
-  const clockIn = new Date(clockInIso).getTime();
-  const clockOut = clockOutIso ? new Date(clockOutIso).getTime() : Date.now();
-  const grossMs = Math.max(0, clockOut - clockIn);
-
-  let breakMs = 0;
-  for (const entry of breaks) {
-    const start = new Date(entry.startTime).getTime();
-    const end = entry.endTime ? new Date(entry.endTime).getTime() : Date.now();
-    breakMs += Math.max(0, end - start);
-  }
-
-  const netMs = Math.max(0, grossMs - breakMs);
-  return { breakMs, netMs, grossMs };
-}
-
 export function formatDurationHours(ms: number): string {
   return (ms / (1000 * 60 * 60)).toFixed(2);
-}
-
-export function formatNetWorkMinutes(minutes: number): string {
-  return (minutes / 60).toFixed(2);
 }
 
 export function formatDurationHuman(ms: number): string {

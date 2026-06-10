@@ -1,11 +1,16 @@
 import { NextResponse } from 'next/server';
+import { JoinErrorCodes } from '@/lib/errors/join';
 import {
   TimeTrackingErrorCode,
   TimeTrackingErrorCodes,
 } from '@/lib/errors/time-tracking';
 import { ServiceResult } from '@/lib/types/api-response';
 
-const ERROR_STATUS_MAP: Record<TimeTrackingErrorCode, number> = {
+const ERROR_STATUS_MAP: Record<string, number> = {
+  [JoinErrorCodes.ORGANIZATION_NOT_FOUND]: 404,
+  [JoinErrorCodes.DOMAIN_NOT_ALLOWED]: 403,
+  [JoinErrorCodes.NO_ALLOWED_DOMAINS]: 403,
+  [JoinErrorCodes.ALREADY_MEMBER]: 409,
   UNAUTHORIZED: 401,
   FORBIDDEN: 403,
   NO_ACTIVE_ORGANIZATION: 403,

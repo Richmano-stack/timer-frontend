@@ -16,7 +16,7 @@ export const TimeTrackingErrorCodes = {
 export type TimeTrackingErrorCode =
   (typeof TimeTrackingErrorCodes)[keyof typeof TimeTrackingErrorCodes];
 
-export function fail<T>(
+export function fail(
   code: TimeTrackingErrorCode,
   message: string
 ): { success: false; error: { code: string; message: string } } {

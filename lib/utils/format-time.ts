@@ -10,31 +10,10 @@ export function formatElapsed(isoStart: string): string {
     .join(':');
 }
 
-export function formatLocalClock(date: Date): string {
-  return date.toLocaleTimeString(undefined, {
-    hour: '2-digit',
-    minute: '2-digit',
-    second: '2-digit',
-    hour12: false,
-  });
-}
-
-export function formatActivityLabel(statusName: string): string {
-  return statusName.trim() || 'Activity';
-}
-
 export function formatShiftStarted(isoStart: string): string {
   return new Date(isoStart).toLocaleTimeString(undefined, {
     hour: '2-digit',
     minute: '2-digit',
     hour12: true,
   });
-}
-
-export function getTimeCardMode(
-  session: { activeSegment: { isProductive: boolean } | null } | null
-): 'clocked_out' | 'working' | 'on_break' {
-  if (!session?.activeSegment) return 'clocked_out';
-  if (!session.activeSegment.isProductive) return 'on_break';
-  return 'working';
 }

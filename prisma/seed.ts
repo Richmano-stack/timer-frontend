@@ -1,5 +1,6 @@
 import { PrismaClient } from '@prisma/client';
 import { DEFAULT_ACTIVITY_STATUSES } from '../lib/constants/default-activity-statuses';
+import { createDefaultJoinMetadata, serializeOrganizationMetadata } from '../lib/organization/metadata';
 import { seedDefaultActivityStatuses } from '../lib/services/organization-bootstrap.service';
 import { auth } from '../lib/auth';
 
@@ -40,13 +41,19 @@ async function ensureDemoUser() {
 async function main() {
   const userId = await ensureDemoUser();
 
+  const joinMetadata = serializeOrganizationMetadata(createDefaultJoinMetadata(DEMO_EMAIL));
+
   const organization = await prisma.organization.upsert({
     where: { slug: 'demo-company' },
-    update: { name: 'Demo Company' },
+    update: {
+      name: 'Demo Company',
+      metadata: joinMetadata,
+    },
     create: {
       id: DEMO_ORG_ID,
       name: 'Demo Company',
       slug: 'demo-company',
+      metadata: joinMetadata,
     },
   });
 
@@ -74,6 +81,8 @@ async function main() {
   console.log('Seed complete:', {
     organizationId: organization.id,
     organizationSlug: organization.slug,
+    joinUrl: `http://localhost:3000/join/${organization.slug}`,
+    allowedDomains: ['example.com'],
     userId,
     email: DEMO_EMAIL,
     password: DEMO_PASSWORD,

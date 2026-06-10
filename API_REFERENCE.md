@@ -1,8 +1,9 @@
-# API Reference — Timer Frontend (Time Tracking)
+# API Reference — Timer Frontend
 
 > **Generated from static analysis of** `app/api/**/*` **and downstream service/validation layers.**  
-> **Last scanned routes:** 6 endpoints (4 time + 2 admin)  
-> **Base URL (local dev):** `http://localhost:3000`
+> **Last scanned:** 11 custom route handlers + Better Auth proxy  
+> **Base URL (local dev):** `http://localhost:3000`  
+> **See also:** [ARCHITECTURE.md](./ARCHITECTURE.md) for full system map and user journeys.
 
 ---
 
@@ -10,7 +11,7 @@
 
 ### Response Envelope
 
-Every route handler returns JSON using this envelope (via `lib/http/api-handler.ts`):
+Every **custom** route handler returns JSON using this envelope (via `lib/http/api-handler.ts`):
 
 ```json
 {
@@ -29,30 +30,49 @@ Every route handler returns JSON using this envelope (via `lib/http/api-handler.
 }
 ```
 
+Better Auth routes under `/api/auth/*` use Better Auth's own response shapes (not this envelope).
+
 ### Authentication & Authorization
 
-| Item | Current Implementation |
+| Item | Current implementation |
 |------|------------------------|
-| Middleware | **None** — no `middleware.ts` exists in this repository |
-| Session / Bearer token | **Not enforced** on any time-tracking route |
-| Identity source | `userId` and `companyId` are supplied by the **client** in the JSON request body (POST) or query string (GET) |
-| Role checks | **None** — `UserRole` enum exists in Prisma but is not checked by route handlers |
+| Edge middleware | `middleware.ts` protects `/employee`, `/admin`, `/onboarding`, `/billing` pages (session cookie required) |
+| Custom API auth | **Session cookie** via Better Auth; identity is **not** passed in request body |
+| Active tenant | `session.session.activeOrganizationId` on the Better Auth session |
+| Member routes | `executeAuthenticatedRoute` — logged-in member of active org (`lib/http/session-route.ts`) |
+| Admin routes | `executeAdminRoute` — same + `owner` or `admin` role (`lib/security/session-context.ts`) |
+| Public routes | `POST /api/join/request-magic-link` only (no session required) |
 
-**Access control classification for all endpoints below:** **Public (MVP / dev identity in request)** — any caller who knows a valid `userId` + `companyId` pair can invoke these routes.
+**Client requests must include cookies:**
+
+```http
+Cookie: <better-auth session cookie>
+```
+
+The browser client in `lib/api.ts` sets `credentials: 'include'` automatically.
+
+### Identity resolution
+
+Custom routes resolve context in `lib/security/session-context.ts`:
+
+1. `auth.api.getSession({ headers })` — read session from cookie
+2. Require `session.session.activeOrganizationId`
+3. Verify `Member` row exists for `(organizationId, userId)`
+4. Admin routes additionally require `member.role` ∈ `{ owner, admin }`
+
+`userId` and `organizationId` are **never** accepted from the client for authorization on time/admin/org routes.
 
 ### Content Type
 
-All POST endpoints expect:
+POST/PATCH endpoints expect:
 
-```
+```http
 Content-Type: application/json
 ```
 
 ### Timestamps
 
-All `DateTime` fields returned from the service layer are serialized to **ISO 8601 UTC strings** (e.g. `"2026-06-06T12:40:25.170Z"`) via `lib/utils/time.ts`.
-
-`latitude` and `longitude` on `TimeLog` responses are serialized as **strings** (Prisma `Decimal` → `String()`).
+`DateTime` fields from services are serialized as **ISO 8601 UTC strings** (e.g. `"2026-06-10T12:40:25.170Z"`).
 
 ### Error Code → HTTP Status Mapping
 
@@ -60,446 +80,593 @@ Defined in `lib/http/api-handler.ts`:
 
 | Error Code | HTTP Status |
 |------------|-------------|
-| `VALIDATION_ERROR` | 400 |
+| `UNAUTHORIZED` | 401 |
+| `FORBIDDEN` | 403 |
+| `NO_ACTIVE_ORGANIZATION` | 403 |
 | `USER_NOT_IN_COMPANY` | 403 |
+| `DOMAIN_NOT_ALLOWED` | 403 |
+| `NO_ALLOWED_DOMAINS` | 403 |
+| `VALIDATION_ERROR` | 400 |
+| `ORGANIZATION_NOT_FOUND` | 404 |
 | `NO_ACTIVE_SESSION_FOUND` | 404 |
 | `TIMELOG_NOT_FOUND` | 404 |
 | `ACTIVITY_STATUS_NOT_FOUND` | 404 |
 | `NO_ACTIVE_BREAK_FOUND` | 404 |
 | `USER_ALREADY_CLOCKED_IN` | 409 |
+| `ALREADY_MEMBER` | 409 |
 | `BREAK_ALREADY_ACTIVE` | 409 |
 | `INTERNAL_SERVER_ERROR` | 500 |
-| Unknown error codes | 400 (fallback) |
+| Unknown codes | 400 (fallback) |
 
-### Tenant Isolation
+---
 
-All time-tracking services resolve identity through `lib/security/tenant-context.ts`:
+## Better Auth — `/api/auth/*`
 
-1. **`resolveTenantContext(userId, companyId)`** — verifies an active `User` row exists for the pair before any tenant-scoped operation proceeds. Returns `403 USER_NOT_IN_COMPANY` on mismatch.
+**Handler:** `app/api/auth/[...all]/route.ts` (proxies all Better Auth endpoints)
 
-Verified `userId` / `companyId` values from tenant resolution are used for all subsequent Prisma queries.
+Not wrapped in the `{ success, data }` envelope. Used for:
 
-### Unhandled Server Errors (500)
+| Area | Example paths / client methods |
+|------|--------------------------------|
+| Email/password | `signIn.email`, `signUp.email` |
+| Magic link | `POST /api/auth/sign-in/magic-link`, `GET /api/auth/magic-link/verify` |
+| Session | `getSession`, `signOut` |
+| Organization plugin | `organization.create`, `organization.setActive`, `organization.getFullOrganization`, etc. |
 
-Service execution is wrapped by `executeServiceRoute()` in `lib/http/api-handler.ts`. Uncaught Prisma/runtime faults are logged server-side and returned as:
+Configure plugins in `lib/auth.ts`. Client: `lib/auth-client.ts`.
 
-```json
-{
-  "success": false,
-  "error": {
-    "code": "INTERNAL_SERVER_ERROR",
-    "message": "An unexpected error occurred. Please try again later."
-  }
-}
-```
+---
 
-Raw database stack traces are **not** exposed to clients.
+## Time Tracking
+
+All time routes use **authenticated member** context. `userId` and `organizationId` come from the session.
+
+### Data model note
+
+Time is stored as **flat `TimeLog` segments** (not separate shift + activity tables):
+
+- Each row is one contiguous status period (`startTime`, optional `endTime`)
+- **Clock in** creates an open segment on **Available**
+- **Status change** closes the current segment and opens a new one
+- **Clock out** sets `endTime` on the open segment
 
 ---
 
 ## POST /api/time/clock-in
 
-### 1. OVERVIEW
+**Access:** Authenticated member  
+**Service:** `clockInService()` in `lib/services/time-tracking.service.ts`
 
-- **Description:** Starts a new active work session by creating a `TimeLog` row for a user within a company, rejecting the operation if the user already has an open session (`clockOut IS NULL`).
-- **Access Control:** **Public (MVP)** — no authentication middleware; caller supplies `userId` and `companyId` in the JSON body.
-- **Database operations:**
-  - **Read:** `User` (membership check), `TimeLog` (active session lookup)
-  - **Write:** **Creates** a row in the **`TimeLog`** table
+Starts a new shift by creating an open `TimeLog` segment. Fails with `409` if the user already has an open segment (`endTime IS NULL`).
 
-**Source files:** `app/api/time/clock-in/route.ts` → `clockInService()` in `lib/services/time-tracking.service.ts`
+### Request body
 
----
-
-### 2. REQUEST PARAMETERS
-
-#### URL / Query Parameters
-
-None.
-
-#### Request Body Payload (`JSON`)
-
-| Field | Type | Required | Validation | Notes |
-|-------|------|----------|------------|-------|
-| `userId` | `string` (UUID) | **Required** | Must be valid UUID (`z.string().uuid()`) | Must match an existing `User.id` |
-| `companyId` | `string` (UUID) | **Required** | Must be valid UUID | User must belong to this company |
-| `clockInIp` | `string` \| `null` | Optional | — | Stored on `TimeLog.clockInIp`; defaults to `null` |
-| `latitude` | `number` \| `null` | Optional | — | Stored as `Decimal(10,8)`; defaults to `null` |
-| `longitude` | `number` \| `null` | Optional | — | Stored as `Decimal(11,8)`; defaults to `null` |
-| `notes` | `string` | Optional | — | Defaults to `""` if omitted |
-
-**Example request:**
+| Field | Type | Required | Notes |
+|-------|------|----------|-------|
+| `notes` | `string` | Optional | Stored on the segment |
 
 ```json
 {
-  "userId": "00000000-0000-4000-8000-000000000001",
-  "companyId": "00000000-0000-4000-8000-000000000010",
-  "clockInIp": "192.168.1.10",
-  "latitude": 40.7128,
-  "longitude": -74.0060,
-  "notes": "Started shift"
+  "notes": "Starting morning shift"
 }
 ```
 
----
+Empty body `{}` is valid.
 
-### 3. RESPONSE MATRIX
-
-#### Success Response — `200 OK`
-
-`clockIn` timestamp is set server-side to `utcNow()` at insert time.
+### Success — `200 OK`
 
 ```json
 {
   "success": true,
   "data": {
-    "timeLog": {
-      "id": "381ef1ec-cb55-4cf9-b9cd-5ada183e6bea",
-      "userId": "00000000-0000-4000-8000-000000000001",
-      "companyId": "00000000-0000-4000-8000-000000000010",
-      "clockIn": "2026-06-06T12:40:25.170Z",
-      "clockOut": null,
-      "clockInIp": "192.168.1.10",
-      "clockOutIp": null,
-      "latitude": "40.7128",
-      "longitude": "-74.006",
-      "notes": "Started shift",
-      "createdAt": "2026-06-06T12:40:25.177Z",
-      "updatedAt": "2026-06-06T12:40:25.177Z"
+    "segment": {
+      "id": "uuid",
+      "userId": "string",
+      "organizationId": "string",
+      "activityStatusId": "uuid",
+      "statusName": "Available",
+      "type": "PRODUCTIVE",
+      "colorCode": "#6366f1",
+      "isBillable": true,
+      "isProductive": true,
+      "startTime": "2026-06-10T12:40:25.170Z",
+      "endTime": null,
+      "notes": "Starting morning shift"
     }
   }
 }
 ```
 
-#### Error Responses
+### Common errors
 
-**400 Bad Request — Invalid JSON body**
-
-```json
-{
-  "success": false,
-  "error": {
-    "code": "VALIDATION_ERROR",
-    "message": "Request body must be valid JSON."
-  }
-}
-```
-
-**400 Bad Request — Zod schema failure** (invalid UUID, wrong types, etc.)
-
-```json
-{
-  "success": false,
-  "error": {
-    "code": "VALIDATION_ERROR",
-    "message": "Invalid UUID"
-  }
-}
-```
-
-> Multiple Zod issues are joined with `"; "` in the `message` field.
-
-**403 Forbidden — User not in company**
-
-Triggered when no `User` row exists with `{ id: userId, companyId: companyId }`.
-
-```json
-{
-  "success": false,
-  "error": {
-    "code": "USER_NOT_IN_COMPANY",
-    "message": "User does not belong to the specified company."
-  }
-}
-```
-
-**409 Conflict — Already clocked in**
-
-Triggered when a `TimeLog` exists for the user/company with `clockOut: null`.
-
-```json
-{
-  "success": false,
-  "error": {
-    "code": "USER_ALREADY_CLOCKED_IN",
-    "message": "User already has an active clock-in session."
-  }
-}
-```
-
-**500 Internal Server Error**
-
-Uncaught Prisma/database errors are intercepted by `executeServiceRoute()`:
-
-```json
-{
-  "success": false,
-  "error": {
-    "code": "INTERNAL_SERVER_ERROR",
-    "message": "An unexpected error occurred. Please try again later."
-  }
-}
-```
+| Code | Status | When |
+|------|--------|------|
+| `UNAUTHORIZED` | 401 | No session |
+| `NO_ACTIVE_ORGANIZATION` | 403 | Session has no active org |
+| `USER_NOT_IN_COMPANY` | 403 | Not a member of active org |
+| `USER_ALREADY_CLOCKED_IN` | 409 | Open segment already exists |
+| `VALIDATION_ERROR` | 400 | Invalid JSON or body |
 
 ---
 
 ## POST /api/time/clock-out
 
-### 1. OVERVIEW
+**Access:** Authenticated member  
+**Service:** `clockOutService()`
 
-- **Description:** Closes the user's single active `TimeLog` session by setting `clockOut`, and atomically closes any open `ActivityLog` rows (`endTime IS NULL`) on that session inside a database transaction.
-- **Access Control:** **Public (MVP)** — caller supplies `userId` and `companyId` in the JSON body.
-- **Database operations:**
-  - **Read:** `TimeLog` (active session lookup)
-  - **Write (transaction):**
-    - **Updates** all open rows in **`ActivityLog`** for the active `timeLogId` (`endTime` set to server UTC now)
-    - **Computes** server-authoritative `netWorkMinutes` (gross elapsed minus break duration) from persisted DB timestamps via `computeNetWorkMinutes()` in `lib/utils/time.ts`
-    - **Updates** the active row in **`TimeLog`** (`clockOut`, optional `clockOutIp`, locked `netWorkMinutes`)
+Closes the user's open `TimeLog` segment (`endTime = now`).
 
-**Source files:** `app/api/time/clock-out/route.ts` → `clockOutService()` in `lib/services/time-tracking.service.ts`
+### Request body
 
----
+None (empty body or `{}`).
 
-### 2. REQUEST PARAMETERS
-
-#### URL / Query Parameters
-
-None.
-
-#### Request Body Payload (`JSON`)
-
-| Field | Type | Required | Validation | Notes |
-|-------|------|----------|------------|-------|
-| `userId` | `string` (UUID) | **Required** | Valid UUID | Used to locate active session |
-| `companyId` | `string` (UUID) | **Required** | Valid UUID | Scoped with `userId` |
-| `clockOutIp` | `string` \| `null` | Optional | — | Stored on `TimeLog.clockOutIp`; defaults to `null` |
-
-**Example request:**
-
-```json
-{
-  "userId": "00000000-0000-4000-8000-000000000001",
-  "companyId": "00000000-0000-4000-8000-000000000010",
-  "clockOutIp": "192.168.1.10"
-}
-```
-
----
-
-### 3. RESPONSE MATRIX
-
-#### Success Response — `200 OK`
+### Success — `200 OK`
 
 ```json
 {
   "success": true,
   "data": {
-    "timeLog": {
-      "id": "381ef1ec-cb55-4cf9-b9cd-5ada183e6bea",
-      "userId": "00000000-0000-4000-8000-000000000001",
-      "companyId": "00000000-0000-4000-8000-000000000010",
-      "clockIn": "2026-06-06T12:40:25.170Z",
-      "clockOut": "2026-06-06T12:41:22.853Z",
-      "netWorkMinutes": 0,
-      "clockInIp": null,
-      "clockOutIp": "192.168.1.10",
-      "latitude": null,
-      "longitude": null,
-      "notes": "",
-      "createdAt": "2026-06-06T12:40:25.177Z",
-      "updatedAt": "2026-06-06T12:41:22.912Z"
+    "segment": {
+      "id": "uuid",
+      "endTime": "2026-06-10T17:00:00.000Z",
+      "statusName": "Available"
     }
   }
 }
 ```
 
-#### Error Responses
+### Common errors
 
-**400 Bad Request — Invalid JSON**
-
-```json
-{
-  "success": false,
-  "error": {
-    "code": "VALIDATION_ERROR",
-    "message": "Request body must be valid JSON."
-  }
-}
-```
-
-**400 Bad Request — Zod validation failure**
-
-```json
-{
-  "success": false,
-  "error": {
-    "code": "VALIDATION_ERROR",
-    "message": "Invalid UUID"
-  }
-}
-```
-
-**404 Not Found — No active session**
-
-Triggered when no `TimeLog` exists with `{ userId, companyId, clockOut: null }`.
-
-```json
-{
-  "success": false,
-  "error": {
-    "code": "NO_ACTIVE_SESSION_FOUND",
-    "message": "No active clock-in session found for this user."
-  }
-}
-```
-
-**500 Internal Server Error**
-
-Uncaught Prisma/transaction errors are intercepted by `executeServiceRoute()`:
-
-```json
-{
-  "success": false,
-  "error": {
-    "code": "INTERNAL_SERVER_ERROR",
-    "message": "An unexpected error occurred. Please try again later."
-  }
-}
-```
-
----
-
-## GET /api/time/my-day
-
-### 1. OVERVIEW
-
-- **Description:** Returns an employee's day view: active session (if any), company activity statuses, shift rows (`TimeLog`), activity rows (`ActivityLog`), timeline, and summary. Closed shifts are filtered by `date`; an **open shift is always included in full** from `clockIn` through now, even when `clockIn` falls on a prior calendar day (overnight shifts).
-- **Access Control:** **Public (MVP)** — caller supplies `userId`, `companyId`, and optional `date` as query parameters.
-- **Database operations:**
-  - **Read:** `User`, `ActivityStatus`, `TimeLog` (filtered by date range, plus open shift merge), nested `ActivityLog`, open session lookup
-  - **Write:** None
-
-**Source files:** `app/api/time/my-day/route.ts` → `getMyDayService()` in `lib/services/time-tracking.service.ts`
-
----
-
-### 2. REQUEST PARAMETERS
-
-#### URL / Query Parameters
-
-| Parameter | Type | Required | Validation | Notes |
-|-----------|------|----------|------------|-------|
-| `userId` | `string` (UUID) | **Required** | Valid UUID | Must match an existing `User.id` |
-| `companyId` | `string` (UUID) | **Required** | Valid UUID | User must belong to this company |
-| `date` | `string` | Optional | `YYYY-MM-DD` | Defaults to UTC today when omitted |
-
-**Example request:**
-
-```
-GET /api/time/my-day?userId=00000000-0000-4000-8000-000000000001&companyId=00000000-0000-4000-8000-000000000010&date=2026-06-06
-```
-
-#### Request Body Payload (`JSON`)
-
-None.
-
----
-
-### 3. RESPONSE MATRIX
-
-#### Success Response — `200 OK`
-
-```json
-{
-  "success": true,
-  "data": {
-    "employeeName": "Demo Employee",
-    "date": "2026-06-06",
-    "activeSession": null,
-    "activityStatuses": [
-      { "id": "00000000-0000-4000-8000-000000000101", "name": "Lunch", "isProductive": false }
-    ],
-    "shifts": [],
-    "activities": []
-  }
-}
-```
-
-When clocked in, `activeSession` contains the open `TimeLog` and any open `ActivityLog`. Use this endpoint as the **canonical read** for current session state (replaces the removed `/api/time/active`). Admin agent drill-down also uses this endpoint with any `userId`.
-
-#### Error Responses
-
-Same envelope as other time routes: `VALIDATION_ERROR` (400), `USER_NOT_IN_COMPANY` (403), `INTERNAL_SERVER_ERROR` (500).
+| Code | Status | When |
+|------|--------|------|
+| `NO_ACTIVE_SESSION_FOUND` | 404 | No open segment |
 
 ---
 
 ## POST /api/time/status
 
-### 1. OVERVIEW
+**Access:** Authenticated member  
+**Service:** `setStatusService()`
 
-- **Description:** Switches the agent's current status on an open shift. Ends any open activity and optionally starts a new one. Omit `statusId` and `statusName` to return to **Available** (no open activity).
-- **Access Control:** **Public (MVP)** — caller supplies `userId` and `companyId` in JSON body.
-- **Database operations:**
-  - **Read:** tenant scope, active `TimeLog`, `ActivityStatus` (when switching)
-  - **Write:** close open `ActivityLog`, create new `ActivityLog` when switching to a status
+Switches activity on an open shift. Closes the current segment and opens a new one for the target status.
 
-**Source files:** `app/api/time/status/route.ts` → `setStatusService()` in `lib/services/time-tracking.service.ts`
+Omit both `statusId` and `statusName` to switch to **Available**.
 
----
-
-### 2. REQUEST PARAMETERS
-
-#### Request Body Payload (`JSON`)
+### Request body
 
 | Field | Type | Required | Notes |
 |-------|------|----------|-------|
-| `userId` | UUID | **Required** | Employee id |
-| `companyId` | UUID | **Required** | Company id |
-| `statusId` | UUID | Optional | Target status; omit both id and name for Available |
-| `statusName` | string | Optional | Alternative to `statusId` |
+| `statusId` | UUID string | Optional | Target `ActivityStatus.id` |
+| `statusName` | string | Optional | Alternative lookup by name |
+
+Provide **one of** `statusId` or `statusName`, not both.
+
+```json
+{
+  "statusId": "00000000-0000-4000-8000-000000000101"
+}
+```
+
+```json
+{}
+```
+
+(empty body → Available)
+
+### Success — `200 OK`
+
+```json
+{
+  "success": true,
+  "data": {
+    "segment": {
+      "id": "uuid",
+      "statusName": "Handling Contact",
+      "startTime": "2026-06-10T13:00:00.000Z",
+      "endTime": null
+    }
+  }
+}
+```
+
+If already on the requested status, returns the current segment unchanged.
+
+### Common errors
+
+| Code | Status | When |
+|------|--------|------|
+| `NO_ACTIVE_SESSION_FOUND` | 404 | Not clocked in |
+| `ACTIVITY_STATUS_NOT_FOUND` | 404 | Unknown status for this org |
+
+---
+
+## GET /api/time/my-day
+
+**Access:** Authenticated member (own day) **or** admin with `?userId=`  
+**Service:** `getMyDayService()`
+
+Returns employee day view: active session, org statuses, shifts, activities, timeline, summary.
+
+### Query parameters
+
+| Parameter | Type | Required | Notes |
+|-----------|------|----------|-------|
+| `date` | `YYYY-MM-DD` | Optional | Defaults to UTC today |
+| `userId` | string | Optional | **Admin only** — view another member's day |
+
+```
+GET /api/time/my-day?date=2026-06-10
+GET /api/time/my-day?userId=<memberId>&date=2026-06-10
+```
+
+### Success — `200 OK`
+
+```json
+{
+  "success": true,
+  "data": {
+    "employeeName": "Demo Owner",
+    "date": "2026-06-10",
+    "activeSession": {
+      "activeSegment": null
+    },
+    "activityStatuses": [
+      {
+        "id": "uuid",
+        "name": "Available",
+        "type": "PRODUCTIVE",
+        "colorCode": "#6366f1",
+        "isBillable": true,
+        "isProductive": true
+      }
+    ],
+    "shifts": [],
+    "activities": [],
+    "timeline": [],
+    "summary": {
+      "gross": "0.00",
+      "breaks": "0.00",
+      "net": "0.00"
+    }
+  }
+}
+```
+
+Types: `types/time-tracking.ts` (`MyDayResponse`).
+
+### Access notes
+
+- Without `userId`: any authenticated member sees **their own** day
+- With `userId`: requires **admin** role; `organizationId` still from session (not from query)
+
+---
+
+## Admin
+
+All admin routes require **admin or owner** role on the active organization.
+
+---
+
+## GET /api/admin/overview
+
+**Access:** Admin  
+**Service:** `getAdminOverviewService()`
+
+Real-time floor monitor payload: KPIs, status breakdown, agent rows, compliance alerts.
+
+### Query parameters
+
+None.
+
+### Success — `200 OK`
+
+```json
+{
+  "success": true,
+  "data": {
+    "kpis": {
+      "activeShiftCount": 3,
+      "onBreakCount": 1,
+      "availableCount": 2,
+      "offFloorCount": 5,
+      "totalRegistered": 10
+    },
+    "statusBreakdown": [
+      { "name": "Available", "count": 2, "isProductive": true }
+    ],
+    "floorAgents": [
+      {
+        "userId": "string",
+        "employeeName": "Jane Agent",
+        "timeLogId": "uuid-or-null",
+        "clockIn": "2026-06-10T08:00:00.000Z",
+        "displayStatus": "Available",
+        "isProductive": true,
+        "statusSince": "2026-06-10T08:00:00.000Z",
+        "breakToday": "0.50",
+        "isOnShift": true
+      }
+    ],
+    "complianceAlerts": []
+  }
+}
+```
+
+Types: `types/admin-dashboard.ts` (`AdminOverviewResponse`).
+
+---
+
+## GET /api/admin/timesheets
+
+**Access:** Admin  
+**Service:** `getTimesheetsService()`
+
+Timesheet rows for a date range (closed shifts).
+
+### Query parameters
+
+| Parameter | Type | Required |
+|-----------|------|----------|
+| `startDate` | `YYYY-MM-DD` | **Required** |
+| `endDate` | `YYYY-MM-DD` | **Required** |
+
+```
+GET /api/admin/timesheets?startDate=2026-06-01&endDate=2026-06-10
+```
+
+### Success — `200 OK`
+
+```json
+{
+  "success": true,
+  "data": {
+    "rows": [
+      {
+        "timeLogId": "uuid",
+        "userId": "string",
+        "employeeName": "Jane Agent",
+        "date": "2026-06-10",
+        "clockIn": "2026-06-10T08:00:00.000Z",
+        "clockOut": "2026-06-10T17:00:00.000Z",
+        "clockInFormatted": "8:00 AM",
+        "clockOutFormatted": "5:00 PM",
+        "breakDeductions": "0.50",
+        "netWorkHours": "8.00"
+      }
+    ]
+  }
+}
+```
+
+---
+
+## Organization
+
+---
+
+## POST /api/organization/bootstrap
+
+**Access:** Admin  
+**Service:** `seedDefaultActivityStatuses()` + `initializeJoinMetadata()`
+
+Called after org creation during onboarding. Seeds default activity statuses and initializes join metadata (`allowedDomains` from owner email).
+
+### Request body
+
+None.
+
+### Success — `200 OK`
+
+```json
+{
+  "success": true,
+  "data": {
+    "seeded": 8,
+    "joinMetadataInitialized": true
+  }
+}
+```
+
+---
+
+## GET /api/organization/join-settings
+
+**Access:** Admin  
+**Service:** `getJoinSettingsForAdmin()`
+
+Returns shareable join URL and allowed email domains. Lazily initializes join metadata from owner email if missing.
+
+### Success — `200 OK`
+
+```json
+{
+  "success": true,
+  "data": {
+    "organizationId": "string",
+    "organizationName": "Demo Company",
+    "organizationSlug": "demo-company",
+    "allowedDomains": ["example.com"],
+    "joinUrl": "http://localhost:3000/join/demo-company"
+  }
+}
+```
+
+---
+
+## PATCH /api/organization/join-settings
+
+**Access:** Admin  
+**Service:** `updateJoinSettings()`
+
+Updates allowed email domains for employee self-serve join.
+
+### Request body
+
+| Field | Type | Required | Notes |
+|-------|------|----------|-------|
+| `allowedDomains` | `string[]` | **Required** | 1–20 domains, e.g. `["acme.com"]` |
+
+```json
+{
+  "allowedDomains": ["example.com", "acme.co.uk"]
+}
+```
+
+### Success — `200 OK`
+
+Same shape as `GET /api/organization/join-settings`.
+
+---
+
+## Join (public)
+
+---
+
+## POST /api/join/request-magic-link
+
+**Access:** **Public** (no session)  
+**Service:** `validateJoinEmail()` + Better Auth `auth.api.signInMagicLink`
+
+Employee enters work email on `/join/{orgSlug}`. Server validates domain against org `metadata.allowedDomains`, then sends a Better Auth magic link.
+
+Membership is **not** created here — that happens on `/join/{orgSlug}/complete` after the user clicks the link.
+
+### Request body
+
+| Field | Type | Required | Notes |
+|-------|------|----------|-------|
+| `email` | email string | **Required** | Work email to verify |
+| `orgSlug` | string | **Required** | Organization slug from join URL |
+
+```json
+{
+  "email": "agent@example.com",
+  "orgSlug": "demo-company"
+}
+```
+
+### Success — `200 OK`
+
+```json
+{
+  "success": true,
+  "data": {
+    "message": "Magic link sent. Check your inbox to continue joining the team.",
+    "organizationName": "Demo Company"
+  }
+}
+```
+
+In development, the link URL is logged to the server console (`[magic-link] Sign-in link stub` in `lib/auth.ts`).
+
+### Common errors
+
+| Code | Status | When |
+|------|--------|------|
+| `ORGANIZATION_NOT_FOUND` | 404 | Unknown `orgSlug` |
+| `DOMAIN_NOT_ALLOWED` | 403 | Email domain not in allowlist |
+| `NO_ALLOWED_DOMAINS` | 403 | Org has no domains configured |
+| `VALIDATION_ERROR` | 400 | Invalid email or slug |
+
+### Post-magic-link flow (not an API route)
+
+```
+GET /api/auth/magic-link/verify?token=...&callbackURL=/join/{orgSlug}/complete
+  → Better Auth creates session (and user if new)
+  → Redirect to /join/{orgSlug}/complete (server page)
+  → completeOrganizationJoin() adds Member row
+  → setActiveOrganization
+  → Redirect to /employee/track
+```
 
 ---
 
 ## Appendix A — Prisma Tables Referenced
 
-| Table | Model | Used By |
+| Table | Model | Used by |
 |-------|-------|---------|
-| `User` | `User` | All endpoints (tenant check) |
-| `TimeLog` | `TimeLog` | All time endpoints; admin overview & timesheets |
-| `ActivityStatus` | `ActivityStatus` | Status switch (read), company status catalog |
-| `ActivityLog` | `ActivityLog` | Status switch, clock-out (update), my-day (read) |
-| `Company` | `Company` | Indirect via foreign keys on `User` / `TimeLog` / `ActivityStatus` |
+| `user` | `User` | Auth, members, time logs |
+| `session` | `Session` | Better Auth sessions (`activeOrganizationId`) |
+| `organization` | `Organization` | Tenant; `metadata` JSON for join settings |
+| `member` | `Member` | User ↔ org membership and role |
+| `activity_status` | `ActivityStatus` | Per-org status definitions |
+| `time_log` | `TimeLog` | Clock segments (shift + status history) |
+| `invitation` | `Invitation` | Better Auth org plugin (legacy per-email flow unused) |
 
 ---
 
 ## Appendix B — Route Inventory
 
-| Method | Path | Handler Export | Service Function |
-|--------|------|----------------|------------------|
-| `POST` | `/api/time/clock-in` | `POST` | `clockInService` |
-| `POST` | `/api/time/clock-out` | `POST` | `clockOutService` |
-| `POST` | `/api/time/status` | `POST` | `setStatusService` |
-| `GET` | `/api/time/my-day` | `GET` | `getMyDayService` |
-| `GET` | `/api/admin/overview` | `GET` | `getAdminOverviewService` |
-| `GET` | `/api/admin/timesheets` | `GET` | `getTimesheetsService` |
+| Method | Path | Access | Service / handler |
+|--------|------|--------|-------------------|
+| `*` | `/api/auth/*` | Varies | Better Auth (`lib/auth.ts`) |
+| `POST` | `/api/time/clock-in` | Member | `clockInService` |
+| `POST` | `/api/time/clock-out` | Member | `clockOutService` |
+| `POST` | `/api/time/status` | Member | `setStatusService` |
+| `GET` | `/api/time/my-day` | Member / Admin† | `getMyDayService` |
+| `GET` | `/api/admin/overview` | Admin | `getAdminOverviewService` |
+| `GET` | `/api/admin/timesheets` | Admin | `getTimesheetsService` |
+| `POST` | `/api/organization/bootstrap` | Admin | `seedDefaultActivityStatuses`, `initializeJoinMetadata` |
+| `GET` | `/api/organization/join-settings` | Admin | `getJoinSettingsForAdmin` |
+| `PATCH` | `/api/organization/join-settings` | Admin | `updateJoinSettings` |
+| `POST` | `/api/join/request-magic-link` | Public | `validateJoinEmail` + `signInMagicLink` |
 
-No routes were found under `pages/api/**` or other API directories at time of scan.
+† Admin when `?userId=` is provided.
 
 ---
 
-## Appendix C — Local Testing (Seed Data)
+## Appendix C — Local Testing
 
-After `pnpm db:seed`, the following dev identity is available (from `.env.example`):
+### Seed data
 
-| Variable | Value |
-|----------|-------|
-| `NEXT_PUBLIC_DEV_USER_ID` | `00000000-0000-4000-8000-000000000001` |
-| `NEXT_PUBLIC_DEV_COMPANY_ID` | `00000000-0000-4000-8000-000000000010` |
+After `pnpm db:seed`:
 
-**Example curl — clock in:**
+| Item | Value |
+|------|-------|
+| Email | `demo@example.com` |
+| Password | `DemoPassword1!` |
+| Org slug | `demo-company` |
+| Join URL | `http://localhost:3000/join/demo-company` |
+| Allowed domain | `example.com` |
+
+### Testing custom APIs
+
+Custom routes require a **logged-in session cookie**. Easiest approaches:
+
+1. **Browser** — log in at `/login`, use the app or `/developer/sandbox` (dev only)
+2. **curl** — sign in via Better Auth first, then pass the session cookie:
 
 ```bash
+# Example: clock in (after obtaining session cookie from browser devtools or auth flow)
 curl -X POST http://localhost:3000/api/time/clock-in \
   -H "Content-Type: application/json" \
-  -d '{"userId":"00000000-0000-4000-8000-000000000001","companyId":"00000000-0000-4000-8000-000000000010"}'
+  -H "Cookie: <session-cookie>" \
+  -d '{"notes":"Test shift"}'
 ```
+
+```bash
+# Example: request join magic link (no cookie needed)
+curl -X POST http://localhost:3000/api/join/request-magic-link \
+  -H "Content-Type: application/json" \
+  -d '{"email":"agent@example.com","orgSlug":"demo-company"}'
+```
+
+### Dev sandbox
+
+`GET /developer/sandbox` (development only) provides a UI to call time and admin endpoints with your current session. Endpoint catalog: `lib/developer/sandbox-endpoints.ts`.
+
+---
+
+## Appendix D — Source File Index
+
+| Concern | Files |
+|---------|-------|
+| Route handlers | `app/api/**/route.ts` |
+| Auth guards | `lib/http/session-route.ts`, `lib/security/session-context.ts` |
+| Time logic | `lib/services/time-tracking.service.ts` |
+| Admin logic | `lib/services/admin-dashboard.service.ts` |
+| Join logic | `lib/services/join.service.ts`, `lib/organization/metadata.ts` |
+| Validation | `lib/validators/time-tracking.ts`, `admin.ts`, `join.ts` |
+| Error codes | `lib/errors/time-tracking.ts`, `lib/errors/join.ts` |
+| Client fetch | `lib/api.ts` |
+| Response envelope | `lib/http/api-handler.ts` |

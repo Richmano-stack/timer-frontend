@@ -1,6 +1,5 @@
 'use client';
 
-import Link from 'next/link';
 import { useCallback, useEffect, useState } from 'react';
 import { AgentDetailDrawer } from '@/components/admin/AgentDetailDrawer';
 import { FloorKpiStrip } from '@/components/admin/FloorKpiStrip';
@@ -41,27 +40,19 @@ export function AdminOverviewDashboard() {
   }, [loadOverview]);
 
   return (
-    <div className="flex h-dvh flex-col overflow-hidden bg-background text-foreground">
+    <div className="flex h-full min-h-0 flex-col overflow-hidden bg-background text-foreground">
       <header className="shrink-0 border-b border-border bg-card px-6 py-4">
-        <div className="flex flex-wrap items-start justify-between gap-4">
-          <div>
-            <p className="text-xs font-semibold uppercase tracking-[0.3em] text-muted-foreground">
-              Organization Admin
-            </p>
-            <h1 className="mt-1 text-2xl font-black tracking-tight text-foreground">
-              Floor Monitor
-            </h1>
-            <p className="mt-1 text-sm text-muted-foreground">
-              Real-time agent status for call-center operations
-              {lastUpdated ? ` · Updated ${lastUpdated.toLocaleTimeString()}` : ''}
-            </p>
-          </div>
-          <Link
-            href="/admin/reports"
-            className="rounded-lg border border-border bg-background px-4 py-2 text-sm font-semibold text-foreground transition hover:bg-brand-accent/10 hover:text-indigo-600 dark:hover:text-indigo-400"
-          >
-            Reports &amp; Export
-          </Link>
+        <div>
+          <p className="text-xs font-semibold uppercase tracking-[0.3em] text-muted-foreground">
+            Organization
+          </p>
+          <h1 className="mt-1 text-2xl font-bold tracking-tight text-foreground">
+            Floor Monitor
+          </h1>
+          <p className="mt-1 text-sm text-muted-foreground">
+            Real-time agent status for call-center operations
+            {lastUpdated ? ` · Updated ${lastUpdated.toLocaleTimeString()}` : ''}
+          </p>
         </div>
       </header>
 

@@ -1,4 +1,6 @@
 import { redirect } from 'next/navigation';
+import { AdminShell } from '@/components/layout/AdminShell';
+import { prisma } from '@/lib/db/prisma';
 import {
   getActiveMemberRole,
   getServerSession,
@@ -25,5 +27,12 @@ export default async function AdminLayout({
     redirect('/employee/track');
   }
 
-  return <>{children}</>;
+  const organization = await prisma.organization.findUnique({
+    where: { id: session.session.activeOrganizationId },
+    select: { name: true },
+  });
+
+  return (
+    <AdminShell organizationName={organization?.name}>{children}</AdminShell>
+  );
 }
