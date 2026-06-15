@@ -3,7 +3,7 @@ import { hasSessionCookie } from '@/lib/security/middleware-session';
 
 const PROTECTED_PREFIXES = ['/employee', '/admin', '/onboarding', '/billing'];
 
-export async function middleware(request: NextRequest) {
+export async function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
   const isProtected = PROTECTED_PREFIXES.some(
