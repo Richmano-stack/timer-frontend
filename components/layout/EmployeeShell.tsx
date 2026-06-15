@@ -3,8 +3,11 @@
 import { Logo } from '@/components/layout/AppLogo';
 import { Sidebar, SidebarBody } from '@/components/ui/sidebar';
 import { cn } from '@/lib/utils';
-import { IconLogout } from '@tabler/icons-react';
-import { useState } from 'react';
+import { IconLogout, IconLayoutDashboard } from '@tabler/icons-react';
+import { useState, useEffect } from 'react';
+import Link from 'next/link';
+import { authClient } from '@/lib/auth-client';
+import { isAdminRole } from '@/lib/organization/roles';
 
 export function EmployeeShell({
   children,
@@ -16,6 +19,21 @@ export function EmployeeShell({
   onLogout?: () => void;
 }) {
   const [open, setOpen] = useState(false);
+  const [isAdmin, setIsAdmin] = useState(false);
+
+  useEffect(() => {
+    async function checkRole() {
+      try {
+        const res = await authClient.organization.getActiveMemberRole();
+        if (res.data?.role && isAdminRole(res.data.role)) {
+          setIsAdmin(true);
+        }
+      } catch (err) {
+        console.error('Failed to check member role', err);
+      }
+    }
+    checkRole();
+  }, []);
 
   return (
     <div
@@ -30,14 +48,25 @@ export function EmployeeShell({
             <Logo />
             <div className="mt-6">{sidebarPanel}</div>
           </div>
-          <button
-            type="button"
-            onClick={onLogout}
-            className="flex w-full items-center gap-2 rounded-lg py-2 text-sm text-muted-foreground transition hover:bg-background hover:text-foreground"
-          >
-            <IconLogout className="h-5 w-5 shrink-0" />
-            <span>Log out</span>
-          </button>
+          <div className="flex flex-col gap-1">
+            {isAdmin && (
+              <Link
+                href="/admin/overview"
+                className="flex w-full items-center gap-2 rounded-lg py-2 text-sm text-muted-foreground transition hover:bg-background hover:text-foreground"
+              >
+                <IconLayoutDashboard className="h-5 w-5 shrink-0" />
+                <span>Admin Dashboard</span>
+              </Link>
+            )}
+            <button
+              type="button"
+              onClick={onLogout}
+              className="flex w-full items-center gap-2 rounded-lg py-2 text-sm text-muted-foreground transition hover:bg-background hover:text-foreground"
+            >
+              <IconLogout className="h-5 w-5 shrink-0" />
+              <span>Log out</span>
+            </button>
+          </div>
         </SidebarBody>
       </Sidebar>
 
