@@ -3,12 +3,14 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { JoinErrorCodes } from '@/lib/errors/join';
 import { ORG_ID, USER_ID } from '@/test/fixtures/time-log';
 
-const { mockOrgFindUnique, mockOrgUpdate, mockMemberFindUnique, mockMemberCreate } = vi.hoisted(
+const { mockOrgFindUnique, mockOrgUpdate, mockMemberFindUnique, mockMemberCreate, mockInvitationFindUnique, mockJoinRequestFindFirst } = vi.hoisted(
   () => ({
     mockOrgFindUnique: vi.fn(),
     mockOrgUpdate: vi.fn(),
     mockMemberFindUnique: vi.fn(),
     mockMemberCreate: vi.fn(),
+    mockInvitationFindUnique: vi.fn(),
+    mockJoinRequestFindFirst: vi.fn(),
   })
 );
 
@@ -22,14 +24,29 @@ vi.mock('@/lib/db/prisma', () => ({
       findUnique: mockMemberFindUnique,
       create: mockMemberCreate,
     },
+    invitation: {
+      findUnique: mockInvitationFindUnique,
+    },
+    joinRequest: {
+      findFirst: mockJoinRequestFindFirst,
+    },
+    $transaction: vi.fn(async (callback: (tx: unknown) => unknown) =>
+      callback({
+        joinRequest: { findFirst: mockJoinRequestFindFirst, update: vi.fn() },
+        member: { create: mockMemberCreate },
+      })
+    ),
   },
 }));
 
 import {
+  completeInvitationJoin,
+  completeJoinWithApprovedRequest,
   completeOrganizationJoin,
   getOrganizationBySlug,
   initializeJoinMetadata,
   updateJoinSettings,
+  validateInvitationForJoin,
   validateJoinEmail,
 } from '@/lib/services/join.service';
 
@@ -40,6 +57,31 @@ const ORG_RECORD = {
   slug: ORG_SLUG,
   metadata: JSON.stringify({ allowedDomains: ['acme.com'] }),
 };
+
+const INVITE_TOKEN = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
+const FUTURE_EXPIRY = new Date(Date.now() + 86_400_000);
+
+function buildPendingInvitation(overrides: {
+  email?: string;
+  metadata?: string | null;
+  status?: string;
+  expiresAt?: Date;
+} = {}) {
+  return {
+    id: INVITE_TOKEN,
+    email: overrides.email ?? 'agent@acme.com',
+    role: 'member',
+    status: overrides.status ?? 'pending',
+    expiresAt: overrides.expiresAt ?? FUTURE_EXPIRY,
+    organizationId: ORG_ID,
+    organization: {
+      id: ORG_ID,
+      name: 'Acme Co',
+      slug: ORG_SLUG,
+      metadata: overrides.metadata ?? ORG_RECORD.metadata,
+    },
+  };
+}
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -120,21 +162,36 @@ describe('validateJoinEmail', () => {
 });
 
 describe('completeOrganizationJoin', () => {
-  beforeEach(() => {
-    mockOrgFindUnique.mockResolvedValue(ORG_RECORD);
-  });
-
-  it('propagates validateJoinEmail failures without creating a member', async () => {
-    const result = await completeOrganizationJoin(ORG_SLUG, USER_ID, 'user@gmail.com');
+  it('rejects domain-only slug join with INVITATION_REQUIRED', async () => {
+    const result = await completeOrganizationJoin(ORG_SLUG, USER_ID, 'user@acme.com');
 
     expect(result.success).toBe(false);
+    if (!result.success) {
+      expect(result.error.code).toBe(JoinErrorCodes.INVITATION_REQUIRED);
+    }
+    expect(mockMemberCreate).not.toHaveBeenCalled();
+    expect(mockOrgFindUnique).not.toHaveBeenCalled();
+  });
+});
+
+describe('completeJoinWithApprovedRequest', () => {
+  it('returns JOIN_REQUEST_NOT_APPROVED when no approved request exists', async () => {
+    mockMemberFindUnique.mockResolvedValue(null);
+    mockJoinRequestFindFirst.mockResolvedValue(null);
+
+    const result = await completeJoinWithApprovedRequest(ORG_ID, USER_ID, 'user@acme.com');
+
+    expect(result.success).toBe(false);
+    if (!result.success) {
+      expect(result.error.code).toBe(JoinErrorCodes.JOIN_REQUEST_NOT_APPROVED);
+    }
     expect(mockMemberCreate).not.toHaveBeenCalled();
   });
 
   it('returns ALREADY_MEMBER when organizationId_userId already exists', async () => {
     mockMemberFindUnique.mockResolvedValue({ id: 'member-1' });
 
-    const result = await completeOrganizationJoin(ORG_SLUG, USER_ID, 'user@acme.com');
+    const result = await completeJoinWithApprovedRequest(ORG_ID, USER_ID, 'user@acme.com');
 
     expect(result.success).toBe(false);
     if (!result.success) {
@@ -143,14 +200,15 @@ describe('completeOrganizationJoin', () => {
     expect(mockMemberCreate).not.toHaveBeenCalled();
   });
 
-  it('creates member with role member on first join', async () => {
+  it('creates member when an approved join request exists', async () => {
     mockMemberFindUnique.mockResolvedValue(null);
+    mockJoinRequestFindFirst.mockResolvedValue({ id: 'jr-1', userId: USER_ID });
     mockMemberCreate.mockResolvedValue({
       id: 'member-new',
       organizationId: ORG_ID,
     });
 
-    const result = await completeOrganizationJoin(ORG_SLUG, USER_ID, 'user@acme.com');
+    const result = await completeJoinWithApprovedRequest(ORG_ID, USER_ID, 'user@acme.com');
 
     expect(result.success).toBe(true);
     expect(mockMemberCreate).toHaveBeenCalledWith(
@@ -167,37 +225,16 @@ describe('completeOrganizationJoin', () => {
     }
   });
 
-  it('does not create member when validation fails mid-flow', async () => {
-    mockOrgFindUnique.mockResolvedValue({
-      ...ORG_RECORD,
-      metadata: JSON.stringify({ allowedDomains: [] }),
-    });
-
-    await completeOrganizationJoin(ORG_SLUG, USER_ID, 'user@acme.com');
-
-    expect(mockMemberCreate).not.toHaveBeenCalled();
-  });
-
-  it('resolves org by slug, not client-supplied organizationId', async () => {
-    mockMemberFindUnique.mockResolvedValue(null);
-    mockMemberCreate.mockResolvedValue({ id: 'member-new', organizationId: ORG_ID });
-
-    await completeOrganizationJoin(ORG_SLUG, USER_ID, 'user@acme.com');
-
-    expect(mockOrgFindUnique).toHaveBeenCalledWith(
-      expect.objectContaining({ where: { slug: ORG_SLUG } })
-    );
-  });
-
   it('returns ALREADY_MEMBER when member.create races and throws P2002', async () => {
     mockMemberFindUnique.mockResolvedValue(null);
+    mockJoinRequestFindFirst.mockResolvedValue({ id: 'jr-1', userId: USER_ID });
     const uniqueViolation = new Prisma.PrismaClientKnownRequestError(
       'Unique constraint failed',
       { code: 'P2002', clientVersion: 'test' }
     );
     mockMemberCreate.mockRejectedValue(uniqueViolation);
 
-    const result = await completeOrganizationJoin(ORG_SLUG, USER_ID, 'user@acme.com');
+    const result = await completeJoinWithApprovedRequest(ORG_ID, USER_ID, 'user@acme.com');
 
     expect(result.success).toBe(false);
     if (!result.success) {
@@ -261,7 +298,9 @@ describe('updateJoinSettings', () => {
     });
     mockOrgUpdate.mockResolvedValue({ id: ORG_ID });
 
-    const result = await updateJoinSettings(ORG_ID, [' @Beta.COM ', 'acme.com']);
+    const result = await updateJoinSettings(ORG_ID, {
+      allowedDomains: [' @Beta.COM ', 'acme.com'],
+    });
 
     expect(result.success).toBe(true);
     expect(mockOrgUpdate).toHaveBeenCalledWith(
@@ -283,7 +322,7 @@ describe('updateJoinSettings', () => {
     });
     mockOrgUpdate.mockResolvedValue({ id: ORG_ID });
 
-    await updateJoinSettings(ORG_ID, ['acme.com', 'beta.com']);
+    await updateJoinSettings(ORG_ID, { allowedDomains: ['acme.com', 'beta.com'] });
 
     expect(mockOrgUpdate).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -304,5 +343,82 @@ describe('getOrganizationBySlug', () => {
     if (result.success) {
       expect(result.data.allowedDomains).toEqual(['acme.com']);
     }
+  });
+});
+
+describe('validateInvitationForJoin', () => {
+  it('returns DOMAIN_NOT_ALLOWED when org allowlist excludes invitation email domain', async () => {
+    mockInvitationFindUnique.mockResolvedValue(
+      buildPendingInvitation({
+        email: 'agent@gmail.com',
+        metadata: JSON.stringify({ allowedDomains: ['acme.com'] }),
+      })
+    );
+
+    const result = await validateInvitationForJoin(INVITE_TOKEN, 'agent@gmail.com');
+
+    expect(result.success).toBe(false);
+    if (!result.success) {
+      expect(result.error.code).toBe(JoinErrorCodes.DOMAIN_NOT_ALLOWED);
+    }
+  });
+
+  it('accepts invitation when email domain matches allowlist after normalization', async () => {
+    mockInvitationFindUnique.mockResolvedValue(
+      buildPendingInvitation({
+        email: 'Agent@ACME.com',
+        metadata: JSON.stringify({ allowedDomains: ['@acme.com'] }),
+      })
+    );
+
+    const result = await validateInvitationForJoin(INVITE_TOKEN, 'Agent@ACME.com');
+
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.organizationId).toBe(ORG_ID);
+    }
+  });
+
+  it('skips domain check when allowedDomains is empty', async () => {
+    mockInvitationFindUnique.mockResolvedValue(
+      buildPendingInvitation({
+        email: 'agent@gmail.com',
+        metadata: JSON.stringify({ allowedDomains: [] }),
+      })
+    );
+
+    const result = await validateInvitationForJoin(INVITE_TOKEN, 'agent@gmail.com');
+
+    expect(result.success).toBe(true);
+  });
+
+  it('returns INVITATION_EMAIL_MISMATCH before domain check', async () => {
+    mockInvitationFindUnique.mockResolvedValue(buildPendingInvitation());
+
+    const result = await validateInvitationForJoin(INVITE_TOKEN, 'other@acme.com');
+
+    expect(result.success).toBe(false);
+    if (!result.success) {
+      expect(result.error.code).toBe(JoinErrorCodes.INVITATION_EMAIL_MISMATCH);
+    }
+  });
+});
+
+describe('completeInvitationJoin', () => {
+  it('propagates DOMAIN_NOT_ALLOWED without creating a member', async () => {
+    mockInvitationFindUnique.mockResolvedValue(
+      buildPendingInvitation({
+        email: 'agent@gmail.com',
+        metadata: JSON.stringify({ allowedDomains: ['acme.com'] }),
+      })
+    );
+
+    const result = await completeInvitationJoin(INVITE_TOKEN, USER_ID, 'agent@gmail.com');
+
+    expect(result.success).toBe(false);
+    if (!result.success) {
+      expect(result.error.code).toBe(JoinErrorCodes.DOMAIN_NOT_ALLOWED);
+    }
+    expect(mockMemberFindUnique).not.toHaveBeenCalled();
   });
 });

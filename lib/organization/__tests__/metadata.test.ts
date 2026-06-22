@@ -43,11 +43,38 @@ describe('parseOrganizationMetadata', () => {
 
     expect(parsed).toEqual({ allowedDomains: ['acme.com', 'beta.com'] });
   });
+
+  it('parses timezone and requireApproval when present', () => {
+    const parsed = parseOrganizationMetadata(
+      JSON.stringify({
+        allowedDomains: ['acme.com'],
+        requireApproval: true,
+        timezone: 'America/New_York',
+      })
+    );
+
+    expect(parsed).toEqual({
+      allowedDomains: ['acme.com'],
+      requireApproval: true,
+      timezone: 'America/New_York',
+    });
+  });
 });
 
 describe('serializeOrganizationMetadata', () => {
   it('persists normalized domains', () => {
     const raw = serializeOrganizationMetadata({ allowedDomains: [' @Acme.COM '] });
     expect(JSON.parse(raw)).toEqual({ allowedDomains: ['acme.com'] });
+  });
+
+  it('persists timezone when provided', () => {
+    const raw = serializeOrganizationMetadata({
+      allowedDomains: ['acme.com'],
+      timezone: 'Europe/London',
+    });
+    expect(JSON.parse(raw)).toEqual({
+      allowedDomains: ['acme.com'],
+      timezone: 'Europe/London',
+    });
   });
 });

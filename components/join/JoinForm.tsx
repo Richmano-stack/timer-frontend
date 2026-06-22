@@ -21,6 +21,9 @@ import {
 } from '@/components/ui/field';
 import { Input } from '@/components/ui/input';
 
+// OAuth is intentionally omitted here: join relies on magic-link metadata (orgSlug)
+// and server-side domain checks; a Google redirect would not carry that context cleanly.
+
 interface JoinFormProps extends React.ComponentProps<'div'> {
   orgSlug: string;
   orgName: string;

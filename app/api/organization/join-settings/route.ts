@@ -6,9 +6,11 @@ import {
   initializeJoinMetadata,
   updateJoinSettings,
 } from '@/lib/services/join.service';
+import { updateOrganizationSettings } from '@/lib/services/organization-settings.service';
 import { updateJoinSettingsSchema } from '@/lib/validators/join';
 import { auth } from '@/lib/auth';
-import { normalizeDomain } from '@/lib/organization/metadata';
+import { normalizeDomain, parseOrganizationMetadata } from '@/lib/organization/metadata';
+import { prisma } from '@/lib/db/prisma';
 
 export async function GET(request: Request) {
   const baseUrl = process.env.NEXT_PUBLIC_APP_URL ?? 'http://localhost:3000';
@@ -36,9 +38,26 @@ export async function PATCH(request: Request) {
     );
   }
 
-  const allowedDomains = parsed.data.allowedDomains.map(normalizeDomain).filter(Boolean);
+  const allowedDomains = parsed.data.allowedDomains?.map(normalizeDomain).filter(Boolean);
 
-  return executeAdminRoute(request, ({ organizationId }) =>
-    updateJoinSettings(organizationId, allowedDomains)
-  );
+  return executeAdminRoute(request, async ({ organizationId }) => {
+    const organization = await prisma.organization.findUnique({
+      where: { id: organizationId },
+      select: { metadata: true },
+    });
+    const timezone = parseOrganizationMetadata(organization?.metadata)?.timezone;
+
+    const result = await updateJoinSettings(organizationId, {
+      ...(allowedDomains !== undefined ? { allowedDomains } : {}),
+      ...(parsed.data.requireApproval !== undefined
+        ? { requireApproval: parsed.data.requireApproval }
+        : {}),
+    });
+
+    if (result.success && timezone) {
+      await updateOrganizationSettings(organizationId, { timezone });
+    }
+
+    return result;
+  });
 }

@@ -2,7 +2,8 @@ import { PrismaClient } from '@prisma/client';
 import { DEFAULT_ACTIVITY_STATUSES } from '../lib/constants/default-activity-statuses';
 import { createDefaultJoinMetadata, serializeOrganizationMetadata } from '../lib/organization/metadata';
 import { seedDefaultActivityStatuses } from '../lib/services/organization-bootstrap.service';
-import { auth } from '../lib/auth';
+import { grantRegistrationPermit } from '@/lib/auth/registration-permit';
+import { auth } from '@/lib/auth';
 
 const prisma = new PrismaClient();
 
@@ -17,6 +18,8 @@ async function ensureDemoUser() {
   });
 
   if (existing) return existing.id;
+
+  grantRegistrationPermit(DEMO_EMAIL, 'owner_bootstrap');
 
   const signUpResult = await auth.api.signUpEmail({
     body: {

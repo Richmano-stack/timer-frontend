@@ -63,29 +63,10 @@ describe('POST /api/join/request-magic-link', () => {
     expect(body.error.code).toBe(JoinErrorCodes.VALIDATION_ERROR);
   });
 
-  it('returns 429 RATE_LIMITED after too many requests from the same IP', async () => {
+  it('returns 410 INVITATION_REQUIRED for valid slug magic-link requests', async () => {
     const { POST } = await import('../route');
 
-    let lastStatus = 0;
-    for (let index = 0; index < 11; index += 1) {
-      const response = await POST(
-        new Request('http://localhost:3000/api/join/request-magic-link', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'x-forwarded-for': '203.0.113.99',
-          },
-          body: JSON.stringify({
-            email: `user${index}@example.com`,
-            orgSlug: 'demo-company',
-          }),
-        })
-      );
-      lastStatus = response.status;
-    }
-
-    expect(lastStatus).toBe(429);
-    const body = await POST(
+    const response = await POST(
       new Request('http://localhost:3000/api/join/request-magic-link', {
         method: 'POST',
         headers: {
@@ -93,14 +74,16 @@ describe('POST /api/join/request-magic-link', () => {
           'x-forwarded-for': '203.0.113.99',
         },
         body: JSON.stringify({
-          email: 'blocked@example.com',
+          email: 'agent@example.com',
           orgSlug: 'demo-company',
         }),
       })
-    ).then((response) => response.json());
+    );
 
+    expect(response.status).toBe(410);
+    const body = await response.json();
     expect(body.success).toBe(false);
-    expect(body.error.code).toBe(JoinErrorCodes.RATE_LIMITED);
+    expect(body.error.code).toBe(JoinErrorCodes.INVITATION_REQUIRED);
     expect(mockSignInMagicLink).not.toHaveBeenCalled();
   });
 
@@ -137,7 +120,7 @@ describe.skipIf(!dbReady)('POST /api/join/request-magic-link (database)', () => 
     await seedJoinTestOrganization(prisma, ORG_SLUG);
   });
 
-  it('returns 403 DOMAIN_NOT_ALLOWED for email outside allowlist', async () => {
+  it('returns 410 INVITATION_REQUIRED for slug-only magic link requests', async () => {
     const { POST } = await import('../route');
 
     const response = await POST(
@@ -145,66 +128,17 @@ describe.skipIf(!dbReady)('POST /api/join/request-magic-link (database)', () => 
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          email: 'agent@gmail.com',
+          email: 'agent@join-test.local',
           orgSlug: ORG_SLUG,
         }),
       })
     );
 
-    expect(response.status).toBe(403);
+    expect(response.status).toBe(410);
     const body = await response.json();
     expect(body.success).toBe(false);
-    expect(body.error.code).toBe(JoinErrorCodes.DOMAIN_NOT_ALLOWED);
+    expect(body.error.code).toBe(JoinErrorCodes.INVITATION_REQUIRED);
     expect(mockSignInMagicLink).not.toHaveBeenCalled();
-  });
-
-  it('returns 404 ORGANIZATION_NOT_FOUND for unknown org slug', async () => {
-    const { POST } = await import('../route');
-
-    const response = await POST(
-      new Request('http://localhost:3000/api/join/request-magic-link', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          email: 'agent@join-test.local',
-          orgSlug: 'missing-org-slug',
-        }),
-      })
-    );
-
-    expect(response.status).toBe(404);
-    const body = await response.json();
-    expect(body.success).toBe(false);
-    expect(body.error.code).toBe(JoinErrorCodes.ORGANIZATION_NOT_FOUND);
-  });
-
-  it('returns 200 and triggers signInMagicLink for allowed domain', async () => {
-    const { POST } = await import('../route');
-
-    const response = await POST(
-      new Request('http://localhost:3000/api/join/request-magic-link', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          email: 'agent@join-test.local',
-          orgSlug: ORG_SLUG,
-        }),
-      })
-    );
-
-    expect(response.status).toBe(200);
-    const body = await response.json();
-    expect(body.success).toBe(true);
-    expect(body.data.organizationName).toBe('Join Test Org');
-    expect(mockSignInMagicLink).toHaveBeenCalledOnce();
-    expect(mockSignInMagicLink).toHaveBeenCalledWith(
-      expect.objectContaining({
-        body: expect.objectContaining({
-          email: 'agent@join-test.local',
-          callbackURL: `http://localhost:3000/join/${ORG_SLUG}/complete`,
-        }),
-      })
-    );
   });
 });
 

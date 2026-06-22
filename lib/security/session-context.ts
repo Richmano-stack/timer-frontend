@@ -6,12 +6,26 @@ import { ServiceResult } from '@/lib/types/api-response';
 
 export { isAdminRole };
 
+/**
+ * Authenticated tenant context resolved from the Better Auth session cookie.
+ *
+ * `organizationId` is always taken from `session.activeOrganizationId` and
+ * verified against the Member table before route handlers run. API routes must
+ * pass these values into services via {@link executeAuthenticatedRoute} or
+ * {@link executeAdminRoute}; services must scope every multi-tenant Prisma
+ * query with {@link withOrganizationScope} from `organization-context.ts`.
+ */
 export interface SessionContext {
   userId: string;
   organizationId: string;
   memberRole: string;
 }
 
+/**
+ * Resolve the caller's user id, active organization, and member role.
+ * Returns `NO_ACTIVE_ORGANIZATION` or `USER_NOT_IN_COMPANY` when tenant context
+ * cannot be established — callers must not proceed to service logic on failure.
+ */
 export async function resolveSessionContext(
   request: Request
 ): Promise<ServiceResult<SessionContext>> {
@@ -58,6 +72,10 @@ export async function resolveSessionContext(
   };
 }
 
+/**
+ * Same as {@link resolveSessionContext} with an additional admin-role check.
+ * Admin dashboard and organization management routes should use this helper.
+ */
 export async function resolveAdminSessionContext(
   request: Request
 ): Promise<ServiceResult<SessionContext>> {

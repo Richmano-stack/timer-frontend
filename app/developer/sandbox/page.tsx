@@ -1,5 +1,6 @@
 import { notFound } from 'next/navigation';
 import { ApiSandboxDashboard } from '@/components/developer/ApiSandboxDashboard';
+import { isDevSandboxEnabled } from '@/lib/developer/is-dev-sandbox-enabled';
 
 export const metadata = {
   title: 'API Sandbox',
@@ -7,7 +8,7 @@ export const metadata = {
 };
 
 export default function DeveloperSandboxPage() {
-  if (process.env.NODE_ENV !== 'development') {
+  if (!isDevSandboxEnabled()) {
     notFound();
   }
 

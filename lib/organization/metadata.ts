@@ -1,5 +1,8 @@
 export interface OrganizationJoinMetadata {
   allowedDomains: string[];
+  requireApproval?: boolean;
+  /** IANA timezone for reporting boundaries (Phase 1 metadata JSON). */
+  timezone?: string;
 }
 
 export function parseOrganizationMetadata(
@@ -18,16 +21,35 @@ export function parseOrganizationMetadata(
           .filter(Boolean)
       : [];
 
-    return { allowedDomains };
+    const requireApproval =
+      typeof parsed.requireApproval === 'boolean' ? parsed.requireApproval : undefined;
+
+    const timezone =
+      typeof parsed.timezone === 'string' && parsed.timezone.trim().length > 0
+        ? parsed.timezone.trim()
+        : undefined;
+
+    return {
+      allowedDomains,
+      ...(requireApproval !== undefined ? { requireApproval } : {}),
+      ...(timezone !== undefined ? { timezone } : {}),
+    };
   } catch {
     return null;
   }
 }
 
 export function serializeOrganizationMetadata(metadata: OrganizationJoinMetadata): string {
-  return JSON.stringify({
+  const payload: OrganizationJoinMetadata = {
     allowedDomains: metadata.allowedDomains.map(normalizeDomain).filter(Boolean),
-  });
+  };
+  if (metadata.requireApproval !== undefined) {
+    payload.requireApproval = metadata.requireApproval;
+  }
+  if (metadata.timezone !== undefined) {
+    payload.timezone = metadata.timezone;
+  }
+  return JSON.stringify(payload);
 }
 
 export function createDefaultJoinMetadata(ownerEmail: string): OrganizationJoinMetadata {

@@ -11,8 +11,8 @@
 - **Employee time card** — clock in/out, status changes, daily summary
 - **Admin floor monitor** — live KPIs, agent table, compliance alerts
 - **Reports** — date-range timesheets with CSV export
-- **Team join** — shareable `/join/{slug}` link with allowed email domains
-- **Auth** — Better Auth (email/password + magic link + organizations)
+- **Team join** — email invitations, allowed domains, pending invite management
+- **Auth** — Better Auth (email/password, Google OAuth, magic link, organizations)
 
 ---
 
@@ -21,6 +21,7 @@
 | Layer | Technology |
 |-------|------------|
 | Framework | Next.js 16 (App Router), React 19 |
+| Client data | TanStack Query v5 |
 | Auth | Better Auth |
 | Database | PostgreSQL + Prisma |
 | Styling | Tailwind CSS 4, shadcn/ui-style components |
@@ -45,7 +46,28 @@ DATABASE_URL=postgresql://user:pass@localhost:5434/timer
 BETTER_AUTH_SECRET=<random-secret>
 BETTER_AUTH_URL=http://localhost:3000
 NEXT_PUBLIC_APP_URL=http://localhost:3000
+
+# Google OAuth (optional for local dev; required for "Continue with Google")
+GOOGLE_CLIENT_ID=<google-oauth-client-id>
+GOOGLE_CLIENT_SECRET=<google-oauth-client-secret>
+
+# Email (optional in local dev — magic links log to the server console without an API key)
+# Required in production (validated at startup via lib/env.ts)
+EMAIL_FROM="OmniShift <noreply@yourdomain.com>"
+RESEND_API_KEY=<resend-api-key>
+# EMAIL_PROVIDER=resend   # resend (default) | postmark | sendgrid
+# POSTMARK_SERVER_TOKEN=    # when EMAIL_PROVIDER=postmark
+# SENDGRID_API_KEY=         # when EMAIL_PROVIDER=sendgrid
 ```
+
+#### Google OAuth setup
+
+1. In [Google Cloud Console](https://console.cloud.google.com/) → **APIs & Services** → **Credentials**, create an **OAuth 2.0 Client ID** (Web application).
+2. Add an **Authorized redirect URI**:
+   - Local: `http://localhost:3000/api/auth/callback/google`
+   - Production: `https://<your-domain>/api/auth/callback/google`
+3. Copy the Client ID and Client Secret into `.env.local` as `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET`.
+4. Ensure `BETTER_AUTH_URL` matches the origin used in the redirect URI (e.g. `http://localhost:3000`).
 
 ### 3. Database
 
@@ -100,4 +122,4 @@ CI (`.github/workflows/ci.yml`) runs `pnpm lint` and `pnpm test:run` (unit) on e
 | Password | `DemoPassword1!` |
 | Join URL | `http://localhost:3000/join/demo-company` |
 
-Magic links are logged to the server console in development (no real email yet).
+Magic links are logged to the server console in development when `RESEND_API_KEY` (or another provider key) is not set. Set `EMAIL_FROM` and a provider API key to deliver real email.

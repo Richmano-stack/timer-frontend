@@ -1,0 +1,41 @@
+# OmniShift — AI Agent Concurrency & Architecture Rules
+
+You are working on **OmniShift**, a highly concurrent, multi-tenant B2B Next.js 16 / Prisma B2B call-center time-tracking application. Multiple AI instances/sessions may be operating on this codebase simultaneously. Follow these rules strictly to avoid race conditions, file conflicts, and broken abstractions.
+
+---
+
+## 1. Multi-Tenant Safety & Data Isolation
+* **The Golden Rule:** Every data operation (query, mutation, delete) MUST explicitly validate and scope against `organizationId`. 
+* Never trust a user-supplied ID from the client without verifying it against the authenticated session organization context via Better Auth.
+* Treat any cross-tenant data leak as a critical, application-breaking failure.
+
+---
+
+## 2. Agent Isolation & File Conflict Prevention
+To prevent multiple agent sessions from overwriting each other's work:
+* **Feature Isolation:** Work strictly within your assigned feature scope. Do not refactor global/shared components, layout files, or utility files unless explicitly ordered.
+* **Component Locality:** When creating features, prefer **colocation**. Keep your page-specific components inside the route folder (e.g., `src/app/(dashboard)/admin/monitor/_components/`) rather than throwing them into a global `@/components/ui/` or `shared/` directory.
+* **Database Migration Safe Zone:** 
+  * Never alter existing Prisma schema files (`schema.prisma`) without validating against the database roadmap.
+  * If you must alter the schema, create isolated fields or tables. Never run destructive migrations (`db push` with data loss) while other agents are testing integration workflows.
+* **File Creation Locks:** Before creating a new file, check if a shell structure exists. If you write a new service, use descriptive, unique file suffixes matching your current epic branch (e.g., `timecard-handler.ts` vs `monitor-handler.ts`).
+
+---
+
+## 3. Tech Stack & Execution Constraints
+* **Framework:** Next.js 16 (App Router), React 19 Server & Client Components. Use `use client` strictly at the leaf-node component level to preserve server rendering efficiencies.
+* **Database:** Prisma ORM with PostgreSQL. All timestamps must be written to the database in **UTC** format.
+* **Styling:** Tailwind CSS v4 and `shadcn/ui` design primitives. Maintain clean, utility-first classes. Do not inject custom raw CSS or external styling sheets.
+
+---
+
+## 4. Concurrent Testing & CI Alignment
+* Ensure any unit test you add is isolated and runs instantly with `pnpm test:run`.
+* For integration or database-level testing, use the dedicated test container (`port 5435`, database `timer_test`). Never execute tests directly against the local development database (`port 5434`), as this clears or breaks the seed state for other agents or developers testing UI features.
+* Always verify that `pnpm lint` passes cleanly before declaring a task finished.
+
+---
+
+## 5. Development Commits & Git Hygiene
+* Commit your changes frequently with concise, small scopes.
+* Namespace your branch or commit messages based on the module you are working on (e.g., `feat(auth-invite): ...`, `fix(floor-monitor): ...`).

@@ -1,11 +1,11 @@
-import { StatusType } from '@prisma/client';
+import { Prisma, StatusType } from '@prisma/client';
 import { prisma } from '@/lib/db/prisma';
 import { fail, TimeTrackingErrorCodes } from '@/lib/errors/time-tracking';
 import {
   resolveActivityStatus,
   resolveAvailableStatus,
 } from '@/lib/security/activity-status';
-import { resolveOrganizationContext } from '@/lib/security/organization-context';
+import { resolveOrganizationContext, withOrganizationScope } from '@/lib/security/organization-context';
 import { ServiceResult } from '@/lib/types/api-response';
 import {
   formatDurationHuman,
@@ -126,9 +126,35 @@ function resolveDateRange(date: string): { rangeStart: Date; rangeEnd: Date } {
   };
 }
 
-async function findOpenSegment(userId: string, organizationId: string) {
-  return prisma.timeLog.findFirst({
-    where: { userId, organizationId, endTime: null },
+type TimeLogClient = Pick<typeof prisma, 'timeLog'>;
+
+function isOpenSegmentUniqueViolation(error: unknown): boolean {
+  return (
+    error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002'
+  );
+}
+
+function alreadyClockedInResult() {
+  return fail(
+    TimeTrackingErrorCodes.USER_ALREADY_CLOCKED_IN,
+    'User already has an active clock-in session.'
+  );
+}
+
+function noActiveSessionResult() {
+  return fail(
+    TimeTrackingErrorCodes.NO_ACTIVE_SESSION_FOUND,
+    'No active clock-in session found for this user.'
+  );
+}
+
+async function findOpenSegment(
+  userId: string,
+  organizationId: string,
+  client: TimeLogClient = prisma
+) {
+  return client.timeLog.findFirst({
+    where: withOrganizationScope(organizationId, { userId, endTime: null }),
     include: segmentInclude,
     orderBy: { startTime: 'desc' },
   });
@@ -150,29 +176,38 @@ export async function clockInService(
   if (!tenantResult.success) return tenantResult;
 
   const tenant = tenantResult.data;
-  const openSegment = await findOpenSegment(tenant.userId, tenant.organizationId);
-
-  if (openSegment) {
-    return fail(
-      TimeTrackingErrorCodes.USER_ALREADY_CLOCKED_IN,
-      'User already has an active clock-in session.'
-    );
-  }
-
   const availableResult = await resolveAvailableStatus(tenant.organizationId);
   if (!availableResult.success) return availableResult;
 
-  const segment = await prisma.timeLog.create({
-    data: {
-      userId: tenant.userId,
-      organizationId: tenant.organizationId,
-      activityStatusId: availableResult.data.id,
-      notes: notes ?? null,
-    },
-    include: segmentInclude,
-  });
+  try {
+    const segment = await prisma.$transaction(async (tx) => {
+      const openSegment = await findOpenSegment(tenant.userId, tenant.organizationId, tx);
 
-  return { success: true, data: { segment: toSegment(segment)! } };
+      if (openSegment) {
+        throw new Error('USER_ALREADY_CLOCKED_IN');
+      }
+
+      return tx.timeLog.create({
+        data: {
+          userId: tenant.userId,
+          organizationId: tenant.organizationId,
+          activityStatusId: availableResult.data.id,
+          notes: notes ?? null,
+        },
+        include: segmentInclude,
+      });
+    });
+
+    return { success: true, data: { segment: toSegment(segment)! } };
+  } catch (error) {
+    if (error instanceof Error && error.message === 'USER_ALREADY_CLOCKED_IN') {
+      return alreadyClockedInResult();
+    }
+    if (isOpenSegmentUniqueViolation(error)) {
+      return alreadyClockedInResult();
+    }
+    throw error;
+  }
 }
 
 export async function clockOutService(
@@ -186,20 +221,45 @@ export async function clockOutService(
   const openSegment = await findOpenSegment(tenant.userId, tenant.organizationId);
 
   if (!openSegment) {
-    return fail(
-      TimeTrackingErrorCodes.NO_ACTIVE_SESSION_FOUND,
-      'No active clock-in session found for this user.'
-    );
+    return noActiveSessionResult();
   }
 
   const now = utcNow();
-  const closed = await prisma.timeLog.update({
-    where: { id: openSegment.id },
-    data: { endTime: now },
-    include: segmentInclude,
-  });
 
-  return { success: true, data: { segment: toSegment(closed)! } };
+  try {
+    const closed = await prisma.$transaction(async (tx) => {
+      const closedCount = await tx.timeLog.updateMany({
+        where: withOrganizationScope(tenant.organizationId, {
+          id: openSegment.id,
+          userId: tenant.userId,
+          endTime: null,
+        }),
+        data: { endTime: now },
+      });
+
+      if (closedCount.count === 0) {
+        throw new Error('NO_ACTIVE_SESSION');
+      }
+
+      const segment = await tx.timeLog.findFirst({
+        where: withOrganizationScope(tenant.organizationId, { id: openSegment.id }),
+        include: segmentInclude,
+      });
+
+      if (!segment) {
+        throw new Error('NO_ACTIVE_SESSION');
+      }
+
+      return segment;
+    });
+
+    return { success: true, data: { segment: toSegment(closed)! } };
+  } catch (error) {
+    if (error instanceof Error && error.message === 'NO_ACTIVE_SESSION') {
+      return noActiveSessionResult();
+    }
+    throw error;
+  }
 }
 
 export async function setStatusService(
@@ -215,10 +275,7 @@ export async function setStatusService(
   const openSegment = await findOpenSegment(tenant.userId, tenant.organizationId);
 
   if (!openSegment) {
-    return fail(
-      TimeTrackingErrorCodes.NO_ACTIVE_SESSION_FOUND,
-      'No active clock-in session found for this user.'
-    );
+    return noActiveSessionResult();
   }
 
   const now = utcNow();
@@ -242,23 +299,41 @@ export async function setStatusService(
     return { success: true, data: { segment: toSegment(openSegment) } };
   }
 
-  const newSegment = await prisma.$transaction(async (tx) => {
-    await tx.timeLog.update({
-      where: { id: openSegment.id },
-      data: { endTime: now },
+  try {
+    const newSegment = await prisma.$transaction(async (tx) => {
+      const closedCount = await tx.timeLog.updateMany({
+        where: withOrganizationScope(tenant.organizationId, {
+          id: openSegment.id,
+          userId: tenant.userId,
+          endTime: null,
+        }),
+        data: { endTime: now },
+      });
+
+      if (closedCount.count === 0) {
+        throw new Error('NO_ACTIVE_SESSION');
+      }
+
+      return tx.timeLog.create({
+        data: {
+          userId: tenant.userId,
+          organizationId: tenant.organizationId,
+          activityStatusId: targetStatus.id,
+        },
+        include: segmentInclude,
+      });
     });
 
-    return tx.timeLog.create({
-      data: {
-        userId: tenant.userId,
-        organizationId: tenant.organizationId,
-        activityStatusId: targetStatus.id,
-      },
-      include: segmentInclude,
-    });
-  });
-
-  return { success: true, data: { segment: toSegment(newSegment) } };
+    return { success: true, data: { segment: toSegment(newSegment) } };
+  } catch (error) {
+    if (error instanceof Error && error.message === 'NO_ACTIVE_SESSION') {
+      return noActiveSessionResult();
+    }
+    if (isOpenSegmentUniqueViolation(error)) {
+      return alreadyClockedInResult();
+    }
+    throw error;
+  }
 }
 
 type TimelineSegment = Awaited<
@@ -336,15 +411,14 @@ export async function getMyDayService(
       select: { name: true },
     }),
     prisma.activityStatus.findMany({
-      where: { organizationId: tenant.organizationId },
+      where: withOrganizationScope(tenant.organizationId, {}),
       orderBy: { name: 'asc' },
     }),
     prisma.timeLog.findMany({
-      where: {
+      where: withOrganizationScope(tenant.organizationId, {
         userId: tenant.userId,
-        organizationId: tenant.organizationId,
         startTime: { gte: rangeStart, lte: rangeEnd },
-      },
+      }),
       include: segmentInclude,
       orderBy: { startTime: 'asc' },
     }),

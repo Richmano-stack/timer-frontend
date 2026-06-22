@@ -37,8 +37,28 @@ jobs:
       - name: Lint
         run: pnpm lint
 
-      - name: Test
+      - name: Test (unit)
         run: pnpm test:run
+
+      - name: Start test database
+        run: pnpm test:db:up
+
+      - name: Migrate test database
+        run: pnpm test:db:migrate
+        env:
+          TEST_DATABASE_URL: postgresql://timer_test_user:timer_test_secret@localhost:5435/timer_test
+
+      - name: Test (integration)
+        run: pnpm test:integration
+        env:
+          TEST_DATABASE_URL: postgresql://timer_test_user:timer_test_secret@localhost:5435/timer_test
+          BETTER_AUTH_SECRET: ci-test-secret-minimum-32-characters-long
+          BETTER_AUTH_URL: http://localhost:3000
+          NEXT_PUBLIC_APP_URL: http://localhost:3000
+
+      - name: Stop test database
+        if: always()
+        run: pnpm test:db:down
 
       - name: Build
         run: pnpm build

@@ -22,9 +22,9 @@ export default async function AdminLayout({
     redirect('/onboarding');
   }
 
-  const { role } = await getActiveMemberRole();
+  const memberRole = (await getActiveMemberRole())?.role;
 
-  if (!isAdminRole(role)) {
+  if (!isAdminRole(memberRole)) {
     redirect('/employee/track');
   }
 

@@ -1,10 +1,14 @@
 'use client';
 
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
-import { FormEvent, useState } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
+import { FormEvent, useEffect, useState } from 'react';
+import { GoogleSignInButton } from '@/components/auth/google-sign-in-button';
 import { AuthBrand } from '@/components/auth-brand';
-import { authClient } from '@/lib/auth-client';
+import {
+  buildOAuthCallbackURL,
+  buildOAuthErrorCallbackURL,
+} from '@/lib/auth/oauth-callback-url';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import {
@@ -21,18 +25,27 @@ import {
   FieldLabel,
 } from '@/components/ui/field';
 import { Input } from '@/components/ui/input';
+import { Separator } from '@/components/ui/separator';
 
 export function SignupForm({
   className,
   ...props
 }: React.ComponentProps<'div'>) {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+
+  useEffect(() => {
+    const error = searchParams.get('error');
+    if (error === 'oauth') {
+      setError('Google sign-in failed. Please try again or use email.');
+    }
+  }, [searchParams]);
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -51,14 +64,25 @@ export function SignupForm({
     setIsSubmitting(true);
 
     try {
-      const signUpResult = await authClient.signUp.email({
-        name: name.trim(),
-        email: email.trim(),
-        password,
+      const response = await fetch('/api/auth/register', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({
+          intent: 'owner_bootstrap',
+          name: name.trim(),
+          email: email.trim(),
+          password,
+        }),
       });
 
-      if (signUpResult.error) {
-        setError(signUpResult.error.message ?? 'Sign up failed.');
+      const result = (await response.json()) as {
+        success: boolean;
+        error?: { message?: string };
+      };
+
+      if (!response.ok || !result.success) {
+        setError(result.error?.message ?? 'Sign up failed.');
         return;
       }
 
@@ -71,19 +95,39 @@ export function SignupForm({
     }
   };
 
+  const oauthCallbackURL = buildOAuthCallbackURL(null);
+  const oauthErrorCallbackURL = buildOAuthErrorCallbackURL('/register');
+
   return (
     <div className={cn('flex flex-col gap-6', className)} {...props}>
       <AuthBrand />
       <Card>
         <CardHeader>
-          <CardTitle>Create an owner account</CardTitle>
+          <CardTitle>Create your workspace</CardTitle>
           <CardDescription>
-            Create your OmniShift organization workspace. Team members should use your company
-            join link instead.
+            Register as a business owner to set up your OmniShift organization. Team members must
+            join through an invitation from their administrator.
           </CardDescription>
         </CardHeader>
         <CardContent>
-          <form onSubmit={handleSubmit}>
+          <FieldGroup>
+            <GoogleSignInButton
+              callbackURL={oauthCallbackURL}
+              errorCallbackURL={oauthErrorCallbackURL}
+              disabled={isSubmitting}
+              onError={setError}
+              requestSignUp
+            />
+            <div className="relative">
+              <div className="absolute inset-0 flex items-center">
+                <Separator />
+              </div>
+              <div className="relative flex justify-center text-xs uppercase">
+                <span className="bg-card px-2 text-muted-foreground">Or continue with email</span>
+              </div>
+            </div>
+          </FieldGroup>
+          <form onSubmit={handleSubmit} className="mt-6">
             <FieldGroup>
               <Field>
                 <FieldLabel htmlFor="name">Full Name</FieldLabel>
@@ -145,7 +189,7 @@ export function SignupForm({
               )}
               <Field>
                 <Button type="submit" className="w-full" disabled={isSubmitting}>
-                  {isSubmitting ? 'Creating account…' : 'Create account'}
+                  {isSubmitting ? 'Creating workspace…' : 'Create workspace'}
                 </Button>
                 <FieldDescription className="text-center">
                   Already have an account?{' '}

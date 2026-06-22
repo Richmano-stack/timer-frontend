@@ -7,6 +7,32 @@ export interface OrganizationContext {
   organizationId: string;
 }
 
+/**
+ * Merge `organizationId` into a Prisma `where` clause for multi-tenant models
+ * (TimeLog, Member, Invitation, etc.). Services must receive `organizationId`
+ * from {@link resolveOrganizationContext} or a server-verified record — never
+ * from unvalidated client input alone.
+ */
+export function withOrganizationScope<T extends Record<string, unknown>>(
+  organizationId: string,
+  where: T
+): T & { organizationId: string } {
+  return { ...where, organizationId };
+}
+
+/**
+ * Runtime guard for service entry points that require tenant scope.
+ * Prefer failing early before any Prisma call when `organizationId` is missing.
+ */
+export function assertOrganizationId(
+  organizationId: string | null | undefined,
+  label = 'query'
+): asserts organizationId is string {
+  if (!organizationId) {
+    throw new Error(`Tenant scope violation: missing organizationId for ${label}`);
+  }
+}
+
 export async function resolveOrganizationContext(
   userId: string,
   organizationId: string

@@ -7,6 +7,7 @@ import {
   IconChartBar,
   IconLayoutDashboard,
   IconLogout,
+  IconSettings,
   IconUsers,
 } from '@tabler/icons-react';
 import { Logo } from '@/components/layout/AppLogo';
@@ -26,6 +27,11 @@ const NAV_ITEMS = [
     label: 'Team',
     href: '/admin/team',
     icon: IconUsers,
+  },
+  {
+    label: 'Settings',
+    href: '/admin/settings',
+    icon: IconSettings,
   },
   {
     label: 'Reports',
