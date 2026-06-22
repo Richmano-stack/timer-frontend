@@ -14,6 +14,12 @@ enum StatusType {
   SYSTEM_ISSUE
 }
 
+enum JoinRequestStatus {
+  PENDING
+  APPROVED
+  DENIED
+}
+
 model User {
   id            String    @id
   name          String
@@ -26,7 +32,9 @@ model User {
   accounts      Account[]
   members       Member[]
   invitations   Invitation[] @relation("Inviter")
+  joinRequests  JoinRequest[]
   timeLogs      TimeLog[]
+  auditLogs     AuditLog[]     @relation("AuditActor")
 
   @@map("user")
 }
@@ -89,8 +97,10 @@ model Organization {
   updatedAt        DateTime         @updatedAt
   members          Member[]
   invitations      Invitation[]
+  joinRequests     JoinRequest[]
   activityStatuses ActivityStatus[]
   timeLogs         TimeLog[]
+  auditLogs        AuditLog[]
 
   @@map("organization")
 }
@@ -125,6 +135,23 @@ model Invitation {
   @@map("invitation")
 }
 
+model JoinRequest {
+  id             String            @id @default(uuid())
+  organizationId String
+  email          String
+  userId         String?
+  status         JoinRequestStatus @default(PENDING)
+  createdAt      DateTime          @default(now())
+  reviewedAt     DateTime?
+  reviewedBy     String?
+  organization   Organization      @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  user           User?             @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([organizationId, status])
+  @@index([organizationId, email])
+  @@map("join_request")
+}
+
 model ActivityStatus {
   id             String       @id @default(uuid())
   name           String
@@ -140,6 +167,8 @@ model ActivityStatus {
   @@map("activity_status")
 }
 
+/// Open segments (endTime IS NULL) are unique per (userId, organizationId) via partial
+/// index `time_log_userId_organizationId_open_key` — see migration 20260623140000.
 model TimeLog {
   id               String         @id @default(uuid())
   userId           String
@@ -155,4 +184,22 @@ model TimeLog {
   @@index([userId, organizationId, endTime])
   @@index([organizationId, startTime])
   @@map("time_log")
+}
+
+/// Append-only security audit trail — never update or delete rows from application code.
+model AuditLog {
+  id             String       @id @default(uuid())
+  organizationId String
+  actorUserId    String
+  action         String
+  targetType     String
+  targetId       String
+  metadata       Json?
+  createdAt      DateTime     @default(now()) @db.Timestamptz(3)
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  actor          User         @relation("AuditActor", fields: [actorUserId], references: [id], onDelete: Cascade)
+
+  @@index([organizationId, createdAt])
+  @@index([organizationId, action])
+  @@map("audit_log")
 }

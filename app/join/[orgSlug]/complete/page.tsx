@@ -2,7 +2,7 @@ import { headers } from 'next/headers';
 import { redirect } from 'next/navigation';
 import { auth } from '@/lib/auth';
 import {
-  completeOrganizationJoin,
+  completeJoinWithApprovedRequest,
   getOrganizationBySlug,
 } from '@/lib/services/join.service';
 
@@ -19,23 +19,23 @@ export default async function JoinCompletePage({ params }: JoinCompletePageProps
     redirect(`/join/${orgSlug}?error=auth_failed`);
   }
 
-  const joinResult = await completeOrganizationJoin(
-    orgSlug,
+  const orgResult = await getOrganizationBySlug(orgSlug);
+  if (!orgResult.success) {
+    redirect(`/join/${orgSlug}`);
+  }
+
+  const joinResult = await completeJoinWithApprovedRequest(
+    orgResult.data.id,
     session.user.id,
     session.user.email
   );
 
   if (!joinResult.success) {
     if (joinResult.error.code === 'ALREADY_MEMBER') {
-      const orgResult = await getOrganizationBySlug(orgSlug);
-
-      if (orgResult.success) {
-        await auth.api.setActiveOrganization({
-          body: { organizationId: orgResult.data.id },
-          headers: requestHeaders,
-        });
-      }
-
+      await auth.api.setActiveOrganization({
+        body: { organizationId: orgResult.data.id },
+        headers: requestHeaders,
+      });
       redirect('/employee/track');
     }
 

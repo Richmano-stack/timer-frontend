@@ -1,39 +1,27 @@
 import type { Metadata } from 'next';
+import Link from 'next/link';
 import { notFound } from 'next/navigation';
+import { AuthBrand } from '@/components/auth-brand';
+import { Button } from '@/components/ui/button';
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from '@/components/ui/card';
+import { getOrganizationBySlug } from '@/lib/services/join.service';
 
 export const metadata: Metadata = {
   title: 'Join',
 };
-import { JoinForm } from '@/components/join/JoinForm';
-import { getOrganizationBySlug } from '@/lib/services/join.service';
 
 interface JoinPageProps {
   params: Promise<{ orgSlug: string }>;
-  searchParams: Promise<{ error?: string; message?: string }>;
 }
 
-function resolveJoinError(
-  error: string | undefined,
-  message: string | undefined
-): string | null {
-  if (message) {
-    try {
-      return decodeURIComponent(message);
-    } catch {
-      return message;
-    }
-  }
-
-  if (error === 'auth_failed') {
-    return 'Sign-in link is invalid or expired. Request a new link below.';
-  }
-
-  return null;
-}
-
-export default async function JoinPage({ params, searchParams }: JoinPageProps) {
+export default async function JoinPage({ params }: JoinPageProps) {
   const { orgSlug } = await params;
-  const { error, message } = await searchParams;
 
   const orgResult = await getOrganizationBySlug(orgSlug);
   if (!orgResult.success) {
@@ -45,12 +33,22 @@ export default async function JoinPage({ params, searchParams }: JoinPageProps) 
   return (
     <div className="flex min-h-svh w-full items-center justify-center p-6 md:p-10">
       <div className="w-full max-w-sm">
-        <JoinForm
-          orgSlug={organization.slug}
-          orgName={organization.name}
-          allowedDomains={organization.allowedDomains}
-          initialError={resolveJoinError(error, message)}
-        />
+        <Card>
+          <CardHeader className="text-center">
+            <AuthBrand className="mb-4 justify-center" />
+            <CardTitle>Invitation required</CardTitle>
+            <CardDescription>
+              Open join links for {organization.name} are no longer available.
+              Ask your administrator for an invitation link to join this
+              organization.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="flex flex-col gap-3">
+            <Button asChild variant="outline">
+              <Link href="/login">Sign in</Link>
+            </Button>
+          </CardContent>
+        </Card>
       </div>
     </div>
   );

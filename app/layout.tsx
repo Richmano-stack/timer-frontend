@@ -1,5 +1,7 @@
+import '@/lib/env';
 import type { Metadata } from 'next';
 import { Inter } from 'next/font/google';
+import { Providers } from '@/app/providers';
 import { ThemeProvider } from '@/components/theme-provider';
 import { ThemeToggleSlot } from '@/components/theme-toggle-slot';
 import { BRAND_NAME, BRAND_TAGLINE } from '@/lib/constants/brand';
@@ -24,8 +26,10 @@ export default function RootLayout({
     <html lang="en" suppressHydrationWarning>
       <body className={`${inter.className} min-h-screen bg-background text-foreground antialiased`}>
         <ThemeProvider attribute="class" defaultTheme="dark" enableSystem={false}>
-          <ThemeToggleSlot />
-          {children}
+          <Providers>
+            <ThemeToggleSlot />
+            {children}
+          </Providers>
         </ThemeProvider>
       </body>
     </html>

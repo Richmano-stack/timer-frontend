@@ -1,0 +1,11 @@
+export const InvitationErrorCodes = {
+  INVITATION_ALREADY_PENDING: 'INVITATION_ALREADY_PENDING',
+  ALREADY_MEMBER: 'ALREADY_MEMBER',
+  INVITATION_NOT_FOUND: 'INVITATION_NOT_FOUND',
+  INVITATION_NOT_REVOCABLE: 'INVITATION_NOT_REVOCABLE',
+  VALIDATION_ERROR: 'VALIDATION_ERROR',
+  RATE_LIMITED: 'RATE_LIMITED',
+} as const;
+
+export type InvitationErrorCode =
+  (typeof InvitationErrorCodes)[keyof typeof InvitationErrorCodes];

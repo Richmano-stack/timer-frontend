@@ -1,5 +1,9 @@
 import { prisma } from '@/lib/db/prisma';
 import { fail, TimeTrackingErrorCodes } from '@/lib/errors/time-tracking';
+import {
+  assertOrganizationId,
+  withOrganizationScope,
+} from '@/lib/security/organization-context';
 import { ServiceResult } from '@/lib/types/api-response';
 import {
   formatDurationHuman,
@@ -82,6 +86,8 @@ export interface TimesheetRow {
 export async function getAdminOverviewService(
   organizationId: string
 ): Promise<ServiceResult<AdminOverviewData>> {
+  assertOrganizationId(organizationId, 'getAdminOverviewService');
+
   const organization = await prisma.organization.findUnique({ where: { id: organizationId } });
   if (!organization) {
     return fail(TimeTrackingErrorCodes.USER_NOT_IN_COMPANY, 'Organization not found.');
@@ -93,20 +99,19 @@ export async function getAdminOverviewService(
 
   const [members, openSegments, todaySegments] = await Promise.all([
     prisma.member.findMany({
-      where: { organizationId },
+      where: withOrganizationScope(organizationId, {}),
       include: { user: { select: { id: true, name: true } } },
       orderBy: { user: { name: 'asc' } },
     }),
     prisma.timeLog.findMany({
-      where: { organizationId, endTime: null },
+      where: withOrganizationScope(organizationId, { endTime: null }),
       include: segmentInclude,
       orderBy: { startTime: 'asc' },
     }),
     prisma.timeLog.findMany({
-      where: {
-        organizationId,
+      where: withOrganizationScope(organizationId, {
         startTime: { gte: todayStart },
-      },
+      }),
       include: {
         activityStatus: { select: { type: true } },
       },
@@ -260,11 +265,10 @@ async function awaitFirstSegmentStart(
 ): Promise<Date> {
   const dayStart = new Date(currentStart.toISOString().slice(0, 10) + 'T00:00:00.000Z');
   const firstToday = await prisma.timeLog.findFirst({
-    where: {
-      organizationId,
+    where: withOrganizationScope(organizationId, {
       userId,
       startTime: { gte: dayStart },
-    },
+    }),
     orderBy: { startTime: 'asc' },
     select: { startTime: true },
   });
@@ -276,6 +280,8 @@ export async function getTimesheetsService(
   startDate: string,
   endDate: string
 ): Promise<ServiceResult<{ rows: TimesheetRow[] }>> {
+  assertOrganizationId(organizationId, 'getTimesheetsService');
+
   const organization = await prisma.organization.findUnique({ where: { id: organizationId } });
   if (!organization) {
     return fail(TimeTrackingErrorCodes.USER_NOT_IN_COMPANY, 'Organization not found.');
@@ -289,10 +295,9 @@ export async function getTimesheetsService(
   }
 
   const segments = await prisma.timeLog.findMany({
-    where: {
-      organizationId,
+    where: withOrganizationScope(organizationId, {
       startTime: { gte: rangeStart, lte: rangeEnd },
-    },
+    }),
     include: {
       user: { select: { id: true, name: true } },
       activityStatus: { select: { type: true } },

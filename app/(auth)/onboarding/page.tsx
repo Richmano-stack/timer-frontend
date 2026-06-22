@@ -4,7 +4,7 @@ import { redirect } from 'next/navigation';
 export const metadata: Metadata = {
   title: 'Onboarding',
 };
-import { OnboardingForm } from '@/components/onboarding-form';
+import { OnboardingWizard } from './_components/onboarding-wizard';
 import {
   getActiveMemberRole,
   getServerSession,
@@ -36,8 +36,8 @@ export default async function OnboardingPage() {
 
   return (
     <div className="flex min-h-svh w-full items-center justify-center p-6 md:p-10">
-      <div className="w-full max-w-sm">
-        <OnboardingForm />
+      <div className="w-full max-w-md">
+        <OnboardingWizard ownerEmail={session.user.email} />
       </div>
     </div>
   );

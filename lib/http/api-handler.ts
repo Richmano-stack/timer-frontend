@@ -1,4 +1,6 @@
 import { NextResponse } from 'next/server';
+import { AuthErrorCodes } from '@/lib/errors/auth';
+import { InvitationErrorCodes } from '@/lib/errors/invitation';
 import { JoinErrorCodes } from '@/lib/errors/join';
 import {
   TimeTrackingErrorCode,
@@ -11,7 +13,20 @@ const ERROR_STATUS_MAP: Record<string, number> = {
   [JoinErrorCodes.DOMAIN_NOT_ALLOWED]: 403,
   [JoinErrorCodes.NO_ALLOWED_DOMAINS]: 403,
   [JoinErrorCodes.ALREADY_MEMBER]: 409,
-  [JoinErrorCodes.RATE_LIMITED]: 429,
+  [JoinErrorCodes.INVITATION_NOT_FOUND]: 404,
+  [JoinErrorCodes.INVITATION_EXPIRED]: 410,
+  [JoinErrorCodes.INVITATION_NOT_PENDING]: 410,
+  [JoinErrorCodes.INVITATION_EMAIL_MISMATCH]: 403,
+  [JoinErrorCodes.JOIN_REQUEST_NOT_FOUND]: 404,
+  [JoinErrorCodes.JOIN_REQUEST_NOT_PENDING]: 409,
+  [JoinErrorCodes.JOIN_REQUEST_ALREADY_PENDING]: 409,
+  [JoinErrorCodes.AUTH_REQUIRED]: 401,
+  [InvitationErrorCodes.INVITATION_ALREADY_PENDING]: 409,
+  [InvitationErrorCodes.INVITATION_NOT_REVOCABLE]: 409,
+  RATE_LIMITED: 429,
+  [AuthErrorCodes.REGISTRATION_NOT_ALLOWED]: 403,
+  [AuthErrorCodes.INVITATION_REQUIRED]: 400,
+  [AuthErrorCodes.INVITATION_INVALID]: 403,
   UNAUTHORIZED: 401,
   FORBIDDEN: 403,
   NO_ACTIVE_ORGANIZATION: 403,

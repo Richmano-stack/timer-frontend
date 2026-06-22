@@ -1,7 +1,7 @@
 # API Reference — OmniShift
 
 > **Generated from static analysis of** `app/api/**/*` **and downstream service/validation layers.**  
-> **Last scanned:** 13 custom route handlers + Better Auth proxy  
+> **Last scanned:** 14 custom route handlers + Better Auth proxy  
 > **Base URL (local dev):** `http://localhost:3000`  
 > **See also:** [ARCHITECTURE.md](./ARCHITECTURE.md) for full system map and user journeys.
 
@@ -41,7 +41,7 @@ Better Auth routes under `/api/auth/*` use Better Auth's own response shapes (no
 | Active tenant | `session.session.activeOrganizationId` on the Better Auth session |
 | Member routes | `executeAuthenticatedRoute` — logged-in member of active org (`lib/http/session-route.ts`) |
 | Admin routes | `executeAdminRoute` — same + `owner` or `admin` role (`lib/security/session-context.ts`) |
-| Public routes | `POST /api/join/request-magic-link` only (no session required) |
+| Public routes | `POST /api/join/request-magic-link`, `POST /api/join/request`, `POST /api/join/invite/{token}/request-magic-link` (no session required for magic-link paths; `/api/join/request` accepts optional session) |
 
 **Client requests must include cookies:**
 
@@ -95,9 +95,23 @@ Defined in `lib/http/api-handler.ts`:
 | `NO_ACTIVE_BREAK_FOUND` | 404 |
 | `USER_ALREADY_CLOCKED_IN` | 409 |
 | `ALREADY_MEMBER` | 409 |
+| `INVITATION_ALREADY_PENDING` | 409 |
 | `BREAK_ALREADY_ACTIVE` | 409 |
 | `INTERNAL_SERVER_ERROR` | 500 |
 | Unknown codes | 400 (fallback) |
+
+### Authentication rate limits
+
+In-memory fixed-window limiters in `lib/security/join-rate-limit.ts` (15-minute windows). Suitable for single-node deployments; use Redis for multi-instance production.
+
+| Endpoint | Limiter | Scopes (max / 15 min) |
+|----------|---------|------------------------|
+| `POST /api/join/request-magic-link` | `checkJoinMagicLinkRateLimit` | IP 10, email 5 |
+| `POST /api/join/invite/{token}/request-magic-link` | `checkJoinMagicLinkRateLimit` | IP 10, email 5 |
+| `POST /api/organization/invitations` | `checkInviteCreationRateLimit` | IP 20, org 10, actor 10 |
+| `POST /api/join/request` (TKT-106) | `checkJoinRequestRateLimit` | IP 10, email 5, org slug 30 |
+
+Exceeded limits return `RATE_LIMITED` (429) with a `retryAfter` message in seconds.
 
 ---
 
@@ -470,6 +484,64 @@ None.
 
 ---
 
+## GET /api/organization/settings
+
+**Access:** Admin  
+**Service:** `getOrganizationSettingsForAdmin()` in `lib/services/organization-settings.service.ts`
+
+Returns workspace configuration for the tenant settings screen: display name, IANA timezone (from `Organization.metadata`), allowed email domains, and join approval policy.
+
+### Success — `200 OK`
+
+```json
+{
+  "success": true,
+  "data": {
+    "organizationId": "string",
+    "name": "Demo Company",
+    "slug": "demo-company",
+    "timezone": "America/New_York",
+    "allowedDomains": ["example.com"],
+    "requireApproval": false
+  }
+}
+```
+
+`timezone` is `null` when not yet configured.
+
+---
+
+## PATCH /api/organization/settings
+
+**Access:** Admin  
+**Service:** `updateOrganizationSettings()` in `lib/services/organization-settings.service.ts`
+
+Updates organization display name and/or operational timezone. `organizationId` is taken from the authenticated admin session only.
+
+### Request body
+
+| Field | Type | Required | Notes |
+|-------|------|----------|-------|
+| `name` | `string` | Optional* | 1–120 characters |
+| `timezone` | `string` | Optional* | Valid IANA timezone identifier |
+
+\* At least one of `name` or `timezone` must be provided.
+
+```json
+{
+  "name": "Acme Call Center",
+  "timezone": "America/Chicago"
+}
+```
+
+### Success — `200 OK`
+
+Same shape as `GET /api/organization/settings`.
+
+Timezone is stored in `Organization.metadata` JSON alongside join settings. Allowed domains and `requireApproval` are updated via `PATCH /api/organization/join-settings`.
+
+---
+
 ## GET /api/organization/join-settings
 
 **Access:** Admin  
@@ -487,6 +559,7 @@ Returns shareable join URL and allowed email domains. Lazily initializes join me
     "organizationName": "Demo Company",
     "organizationSlug": "demo-company",
     "allowedDomains": ["example.com"],
+    "requireApproval": false,
     "joinUrl": "http://localhost:3000/join/demo-company"
   }
 }
@@ -499,17 +572,21 @@ Returns shareable join URL and allowed email domains. Lazily initializes join me
 **Access:** Admin  
 **Service:** `updateJoinSettings()`
 
-Updates allowed email domains for employee self-serve join.
+Updates allowed email domains and/or join approval policy for employee self-serve join.
 
 ### Request body
 
 | Field | Type | Required | Notes |
 |-------|------|----------|-------|
-| `allowedDomains` | `string[]` | **Required** | 1–20 domains, e.g. `["acme.com"]` |
+| `allowedDomains` | `string[]` | Optional* | 1–20 domains, e.g. `["acme.com"]` |
+| `requireApproval` | `boolean` | Optional* | When `true`, `POST /api/join/request` queues pending requests instead of immediate membership |
+
+\* At least one of `allowedDomains` or `requireApproval` must be provided.
 
 ```json
 {
-  "allowedDomains": ["example.com", "acme.co.uk"]
+  "allowedDomains": ["example.com", "acme.co.uk"],
+  "requireApproval": true
 }
 ```
 
@@ -517,7 +594,260 @@ Updates allowed email domains for employee self-serve join.
 
 Same shape as `GET /api/organization/join-settings`.
 
-Domains are **normalized on persist** (lowercase, `@` stripped). The response may echo the raw input array from the request body.
+Domains are **normalized on persist** (lowercase, `@` stripped). The response may echo the raw input array from the request body for `allowedDomains`.
+
+---
+
+## GET /api/organization/join-requests
+
+**Access:** Admin  
+**Service:** `listJoinRequestsForAdmin()` in `lib/services/join-request.service.ts`
+
+Lists join requests for the active organization. Defaults to `PENDING` when no query parameter is supplied.
+
+### Query parameters
+
+| Param | Type | Required | Notes |
+|-------|------|----------|-------|
+| `status` | `"PENDING"` \| `"APPROVED"` \| `"DENIED"` | Optional | Defaults to `PENDING` |
+
+### Success — `200 OK`
+
+```json
+{
+  "success": true,
+  "data": [
+    {
+      "id": "uuid",
+      "email": "agent@example.com",
+      "status": "PENDING",
+      "createdAt": "2026-06-23T12:00:00.000Z",
+      "reviewedAt": null
+    }
+  ]
+}
+```
+
+### Common errors
+
+| Code | Status | When |
+|------|--------|------|
+| `VALIDATION_ERROR` | 400 | Invalid `status` query value |
+| `UNAUTHORIZED` | 401 | No session |
+| `FORBIDDEN` | 403 | Non-admin actor |
+
+---
+
+## POST /api/organization/join-requests/{id}/approve
+
+**Access:** Admin  
+**Service:** `approveJoinRequest()` in `lib/services/join-request.service.ts`
+
+Approves a pending join request for the active organization. `organizationId` and reviewer identity come from the authenticated admin session only — the join request is looked up by `id` **and** scoped to the session tenant.
+
+When the requester (or a user with matching email) already exists, a `Member` row is created with role `member` via `completeJoinWithApprovedRequest()`. If no user account exists yet, the request is marked `APPROVED` without creating a member; the user completes membership later by calling `POST /api/join/request` while signed in (or visiting `/join/{orgSlug}/complete` after sign-in), which redeems the approved row.
+
+### Path parameters
+
+| Param | Type | Required | Notes |
+|-------|------|----------|-------|
+| `id` | UUID string | **Required** | Join request id |
+
+### Success — `200 OK`
+
+```json
+{
+  "success": true,
+  "data": {
+    "joinRequestId": "uuid",
+    "organizationId": "string",
+    "memberId": "uuid-or-null",
+    "email": "agent@example.com"
+  }
+}
+```
+
+### Common errors
+
+| Code | Status | When |
+|------|--------|------|
+| `JOIN_REQUEST_NOT_FOUND` | 404 | Unknown id or cross-tenant access |
+| `JOIN_REQUEST_NOT_PENDING` | 409 | Already approved or denied |
+| `ALREADY_MEMBER` | 409 | User is already a member |
+| `UNAUTHORIZED` | 401 | No session |
+| `FORBIDDEN` | 403 | Non-admin actor |
+
+---
+
+## POST /api/organization/join-requests/{id}/deny
+
+**Access:** Admin  
+**Service:** `denyJoinRequest()` in `lib/services/join-request.service.ts`
+
+Denies a pending join request for the active organization. `organizationId` and reviewer identity come from the authenticated admin session only — the join request is looked up by `id` **and** scoped to the session tenant.
+
+### Path parameters
+
+| Param | Type | Required | Notes |
+|-------|------|----------|-------|
+| `id` | UUID string | **Required** | Join request id |
+
+### Success — `200 OK`
+
+```json
+{
+  "success": true,
+  "data": {
+    "joinRequestId": "uuid",
+    "email": "agent@example.com"
+  }
+}
+```
+
+### Common errors
+
+| Code | Status | When |
+|------|--------|------|
+| `JOIN_REQUEST_NOT_FOUND` | 404 | Unknown id or cross-tenant access |
+| `JOIN_REQUEST_NOT_PENDING` | 409 | Already approved or denied |
+| `UNAUTHORIZED` | 401 | No session |
+| `FORBIDDEN` | 403 | Non-admin actor |
+
+---
+
+## POST /api/organization/invitations
+
+**Access:** Admin  
+**Service:** `createInvitationForAdmin()` in `lib/services/invitation.service.ts`
+
+Creates a pending organization invitation for the given email and role. `organizationId` and `inviterId` are taken from the authenticated admin session only — never from the request body. Invitation `id` serves as the redemption token for the token-gated join flow (TKT-104).
+
+### Request body
+
+| Field | Type | Required | Notes |
+|-------|------|----------|-------|
+| `email` | `string` | **Required** | Valid email address; normalized to lowercase on persist |
+| `role` | `"member"` \| `"admin"` | **Required** | Must be assignable by the actor (`owner` or `admin`) |
+
+```json
+{
+  "email": "agent@example.com",
+  "role": "member"
+}
+```
+
+### Success — `200 OK`
+
+```json
+{
+  "success": true,
+  "data": {
+    "id": "invitation-uuid",
+    "email": "agent@example.com",
+    "role": "member",
+    "status": "pending",
+    "expiresAt": "2026-06-29T12:00:00.000Z",
+    "createdAt": "2026-06-22T12:00:00.000Z"
+  }
+}
+```
+
+`expiresAt` defaults to **7 days** from creation (UTC).
+
+### Errors
+
+| Code | Status | When |
+|------|--------|------|
+| `VALIDATION_ERROR` | 400 | Invalid email, role, or JSON body |
+| `UNAUTHORIZED` | 401 | No session |
+| `FORBIDDEN` | 403 | Non-admin member, or role not assignable by actor |
+| `NO_ACTIVE_ORGANIZATION` | 403 | Session has no active organization |
+| `USER_NOT_IN_COMPANY` | 403 | User is not a member of the active organization |
+| `ALREADY_MEMBER` | 409 | Email already belongs to a member of the organization |
+| `INVITATION_ALREADY_PENDING` | 409 | A non-expired pending invitation already exists for this email |
+| `RATE_LIMITED` | 429 | Too many invitation requests from same IP (20 / 15 min), organization (10 / 15 min), or actor (10 / 15 min) |
+
+Email delivery uses `lib/email/send.ts` (Resend by default; Postmark or SendGrid when `EMAIL_PROVIDER` is set). Without a provider API key in development, messages are logged to the server console instead of being sent.
+
+---
+
+## GET /api/organization/invitations
+
+**Access:** Admin  
+**Service:** `listPendingInvitationsForAdmin()` in `lib/services/invitation.service.ts`
+
+Returns pending, non-expired invitations for the authenticated admin's active organization. `organizationId` is taken from the session only — never from query parameters or the request body. Expired pending invitations and invitations in any other status (`revoked`, `accepted`) are excluded.
+
+### Success — `200 OK`
+
+```json
+{
+  "success": true,
+  "data": [
+    {
+      "id": "invitation-uuid",
+      "email": "agent@example.com",
+      "role": "member",
+      "status": "pending",
+      "expiresAt": "2026-06-29T12:00:00.000Z",
+      "createdAt": "2026-06-22T12:00:00.000Z"
+    }
+  ]
+}
+```
+
+Results are ordered by `createdAt` descending (newest first). An empty array is returned when no qualifying invitations exist.
+
+### Errors
+
+| Code | Status | When |
+|------|--------|------|
+| `UNAUTHORIZED` | 401 | No session |
+| `FORBIDDEN` | 403 | Non-admin member |
+| `NO_ACTIVE_ORGANIZATION` | 403 | Session has no active organization |
+| `USER_NOT_IN_COMPANY` | 403 | User is not a member of the active organization |
+
+---
+
+## DELETE /api/organization/invitations/{id}
+
+**Access:** Admin  
+**Service:** `revokeInvitationForAdmin()` in `lib/services/invitation.service.ts`
+
+Revokes a pending invitation before it is claimed. The invitation must belong to the authenticated admin's active organization; cross-tenant IDs return `404` (not `403`) to avoid leaking invitation existence across tenants.
+
+### Path parameters
+
+| Parameter | Type | Notes |
+|-----------|------|-------|
+| `id` | `string` | Invitation UUID (redemption token) |
+
+### Success — `200 OK`
+
+```json
+{
+  "success": true,
+  "data": {
+    "id": "invitation-uuid",
+    "email": "agent@example.com",
+    "role": "member",
+    "status": "revoked",
+    "expiresAt": "2026-06-29T12:00:00.000Z",
+    "createdAt": "2026-06-22T12:00:00.000Z"
+  }
+}
+```
+
+### Errors
+
+| Code | Status | When |
+|------|--------|------|
+| `UNAUTHORIZED` | 401 | No session |
+| `FORBIDDEN` | 403 | Non-admin member |
+| `NO_ACTIVE_ORGANIZATION` | 403 | Session has no active organization |
+| `USER_NOT_IN_COMPANY` | 403 | User is not a member of the active organization |
+| `INVITATION_NOT_FOUND` | 404 | Unknown ID or invitation belongs to another organization |
+| `INVITATION_NOT_REVOCABLE` | 409 | Invitation already accepted or revoked |
 
 ---
 
@@ -608,26 +938,138 @@ Updates a member's role. Enforced server-side via `lib/organization/roles.ts`:
 
 ---
 
-## POST /api/join/request-magic-link
+## POST /api/join/request
 
-**Access:** **Public** (no session)  
-**Service:** `validateJoinEmail()` + Better Auth `auth.api.signInMagicLink`
+**Access:** Public (optional session)  
+**Service:** `submitJoinRequest()` in `lib/services/join-request.service.ts`
 
-Employee enters work email on `/join/{orgSlug}`. Server validates domain against org `metadata.allowedDomains`, then sends a Better Auth magic link.
+Submits an employee join request for an organization identified by slug. `organizationId` is resolved server-side from `orgSlug` — never from the client body.
 
-Membership is **not** created here — that happens on `/join/{orgSlug}/complete` after the user clicks the link.
+When `Organization.metadata.requireApproval` is **true**, creates a `JoinRequest` in `PENDING` status (no immediate membership). When **false** and the caller is authenticated, creates an `APPROVED` join request and completes membership via `completeJoinWithApprovedRequest()` (domain match alone never grants membership). Authenticated callers with a prior **approved** request (e.g. admin approved before the user signed up) also complete via `completeJoinWithApprovedRequest()`. Unauthenticated callers receive `AUTH_REQUIRED` and must use an invitation link (`/join/invite/{token}`).
+
+Domain validation uses `emailMatchesAllowedDomains` against `metadata.allowedDomains` (same rules as slug join).
 
 ### Request body
 
 | Field | Type | Required | Notes |
 |-------|------|----------|-------|
-| `email` | email string | **Required** | Work email to verify |
 | `orgSlug` | string | **Required** | Organization slug from join URL |
+| `email` | email string | Required if no session | Must match session email when signed in |
 
 ```json
 {
-  "email": "agent@example.com",
-  "orgSlug": "demo-company"
+  "orgSlug": "demo-company",
+  "email": "agent@example.com"
+}
+```
+
+### Success — `200 OK` (queued)
+
+```json
+{
+  "success": true,
+  "data": {
+    "status": "pending",
+    "joinRequestId": "uuid",
+    "organizationName": "Demo Company",
+    "message": "Your join request has been submitted and is awaiting administrator approval."
+  }
+}
+```
+
+### Success — `200 OK` (immediate join, approval disabled + session)
+
+```json
+{
+  "success": true,
+  "data": {
+    "status": "joined",
+    "organizationId": "string",
+    "memberId": "uuid",
+    "organizationName": "Demo Company",
+    "message": "You have joined the organization."
+  }
+}
+```
+
+### Common errors
+
+| Code | Status | When |
+|------|--------|------|
+| `ORGANIZATION_NOT_FOUND` | 404 | Unknown `orgSlug` |
+| `DOMAIN_NOT_ALLOWED` | 403 | Email domain not in allowlist |
+| `NO_ALLOWED_DOMAINS` | 403 | Org has no domains configured |
+| `JOIN_REQUEST_ALREADY_PENDING` | 409 | Duplicate pending request for same email |
+| `ALREADY_MEMBER` | 409 | Authenticated user is already a member |
+| `AUTH_REQUIRED` | 401 | No session (invitation link required for new users) |
+| `JOIN_REQUEST_NOT_APPROVED` | 403 | Authenticated but no approved join request backing membership |
+| `VALIDATION_ERROR` | 400 | Invalid body or email/session mismatch |
+
+---
+
+## POST /api/join/request-magic-link
+
+**Access:** **Public** (no session)  
+**Status:** **Deprecated (TKT-107)** — returns `410 Gone` with `INVITATION_REQUIRED`. Open slug join via magic link is disabled; use `POST /api/join/invite/{token}/request-magic-link` instead.
+
+Previously: employee entered work email on `/join/{orgSlug}` and received a Better Auth magic link. `/join/{orgSlug}` now shows an invitation-required message and does not accept self-serve email entry.
+
+### Request body
+
+| Field | Type | Required | Notes |
+|-------|------|----------|-------|
+| `email` | email string | **Required** | Work email (validated but not used for membership) |
+| `orgSlug` | string | **Required** | Organization slug |
+
+### Response — `410 Gone`
+
+```json
+{
+  "success": false,
+  "error": {
+    "code": "INVITATION_REQUIRED",
+    "message": "Open organization join links are no longer supported. Use an invitation link from your administrator."
+  }
+}
+```
+
+### Common errors
+
+| Code | Status | When |
+|------|--------|------|
+| `INVITATION_REQUIRED` | 410 | Valid body — slug-only self-join disabled |
+| `VALIDATION_ERROR` | 400 | Invalid email or slug |
+
+### Legacy post-magic-link flow (removed)
+
+Slug-based magic-link completion (`completeOrganizationJoin`) no longer creates `Member` rows. Approved join-request completion uses `completeJoinWithApprovedRequest()` on `/join/{orgSlug}/complete` when the user is signed in.
+
+---
+
+## POST /api/join/invite/{token}/request-magic-link
+
+**Access:** **Public** (no session)  
+**Service:** `validateInvitationForJoin()` + Better Auth `auth.api.signInMagicLink`
+
+Invitee opens `/join/invite/{token}` (token is the invitation UUID). Server validates the invitation is pending and not expired, confirms the submitted email matches the invitation target, and when `Organization.metadata.allowedDomains` is non-empty, rejects emails whose domain is not on the allowlist (secondary check; empty allowlist skips domain enforcement). Then sends a magic link.
+
+Membership is **not** created here — that happens on `/join/invite/{token}/complete` after the user clicks the link.
+
+### Path parameters
+
+| Param | Type | Required | Notes |
+|-------|------|----------|-------|
+| `token` | UUID string | **Required** | Invitation record id from admin invite email |
+
+### Request body
+
+| Field | Type | Required | Notes |
+|-------|------|----------|-------|
+| `email` | email string | **Required** | Must match invitation target email |
+
+```json
+{
+  "email": "agent@example.com"
 }
 ```
 
@@ -643,25 +1085,29 @@ Membership is **not** created here — that happens on `/join/{orgSlug}/complete
 }
 ```
 
-In development, the link URL is logged to the server console (`[magic-link] Sign-in link stub` in `lib/auth.ts`).
-
 ### Common errors
 
 | Code | Status | When |
 |------|--------|------|
-| `ORGANIZATION_NOT_FOUND` | 404 | Unknown `orgSlug` |
-| `DOMAIN_NOT_ALLOWED` | 403 | Email domain not in allowlist |
-| `NO_ALLOWED_DOMAINS` | 403 | Org has no domains configured |
-| `RATE_LIMITED` | 429 | Too many requests from same IP (10 / 15 min) or email (5 / 15 min) |
-| `VALIDATION_ERROR` | 400 | Invalid email or slug |
+| `INVITATION_NOT_FOUND` | 404 | Unknown or malformed token |
+| `INVITATION_EXPIRED` | 410 | `expiresAt` is in the past |
+| `INVITATION_NOT_PENDING` | 410 | Invitation revoked or already accepted |
+| `INVITATION_EMAIL_MISMATCH` | 403 |
+| `JOIN_REQUEST_NOT_FOUND` | 404 |
+| `JOIN_REQUEST_NOT_PENDING` | 409 |
+| `JOIN_REQUEST_ALREADY_PENDING` | 409 |
+| `AUTH_REQUIRED` | 401 | Submitted email does not match invitation |
+| `RATE_LIMITED` | 429 | Same limits as slug join (IP 10 / 15 min, email 5 / 15 min) |
+| `VALIDATION_ERROR` | 400 | Invalid email or token format |
 
 ### Post-magic-link flow (not an API route)
 
 ```
-GET /api/auth/magic-link/verify?token=...&callbackURL=/join/{orgSlug}/complete
+GET /api/auth/magic-link/verify?token=...&callbackURL=/join/invite/{token}/complete
   → Better Auth creates session (and user if new)
-  → Redirect to /join/{orgSlug}/complete (server page)
-  → completeOrganizationJoin() adds Member row
+  → Redirect to /join/invite/{token}/complete (server page)
+  → completeJoinWithInvitation() / completeInvitationJoin() adds Member row with invitation role
+  → redeemInvitation() marks invitation accepted
   → setActiveOrganization
   → Redirect to /employee/track
 ```
@@ -674,11 +1120,12 @@ GET /api/auth/magic-link/verify?token=...&callbackURL=/join/{orgSlug}/complete
 |-------|-------|---------|
 | `user` | `User` | Auth, members, time logs |
 | `session` | `Session` | Better Auth sessions (`activeOrganizationId`) |
-| `organization` | `Organization` | Tenant; `metadata` JSON for join settings |
+| `organization` | `Organization` | Tenant; `metadata` JSON for join settings + timezone |
 | `member` | `Member` | User ↔ org membership and role |
 | `activity_status` | `ActivityStatus` | Per-org status definitions |
 | `time_log` | `TimeLog` | Clock segments (shift + status history) |
-| `invitation` | `Invitation` | Better Auth org plugin (legacy per-email flow unused) |
+| `invitation` | `Invitation` | Org invitations (`id` is redemption token; status, expiresAt) |
+| `join_request` | `JoinRequest` | Queued self-serve join requests (`PENDING` / `APPROVED` / `DENIED`) |
 
 ---
 
@@ -695,10 +1142,20 @@ GET /api/auth/magic-link/verify?token=...&callbackURL=/join/{orgSlug}/complete
 | `GET` | `/api/admin/timesheets` | Admin | `getTimesheetsService` |
 | `POST` | `/api/organization/bootstrap` | Admin | `seedDefaultActivityStatuses`, `initializeJoinMetadata` |
 | `GET` | `/api/organization/team` | Admin | `getTeamForAdmin` |
+| `GET` | `/api/organization/settings` | Admin | `getOrganizationSettingsForAdmin` |
+| `PATCH` | `/api/organization/settings` | Admin | `updateOrganizationSettings` |
 | `PATCH` | `/api/organization/members/[memberId]/role` | Admin | `updateMemberRoleForAdmin` |
 | `GET` | `/api/organization/join-settings` | Admin | `getJoinSettingsForAdmin` |
 | `PATCH` | `/api/organization/join-settings` | Admin | `updateJoinSettings` |
-| `POST` | `/api/join/request-magic-link` | Public | `validateJoinEmail` + `signInMagicLink` |
+| `GET` | `/api/organization/join-requests` | Admin | `listJoinRequestsForAdmin` |
+| `POST` | `/api/organization/join-requests/[id]/approve` | Admin | `approveJoinRequest` |
+| `POST` | `/api/organization/join-requests/[id]/deny` | Admin | `denyJoinRequest` |
+| `POST` | `/api/organization/invitations` | Admin | `createInvitationForAdmin` |
+| `GET` | `/api/organization/invitations` | Admin | `listPendingInvitationsForAdmin` |
+| `DELETE` | `/api/organization/invitations/{id}` | Admin | `revokeInvitationForAdmin` |
+| `POST` | `/api/join/request` | Public / optional session | `submitJoinRequest` |
+| `POST` | `/api/join/request-magic-link` | Public | **Deprecated** — returns `INVITATION_REQUIRED` (410) |
+| `POST` | `/api/join/invite/{token}/request-magic-link` | Public | `validateInvitationForJoin` + `signInMagicLink` |
 
 † Admin when `?userId=` is provided.
 
@@ -754,7 +1211,7 @@ curl -X POST http://localhost:3000/api/join/request-magic-link \
 | Auth guards | `lib/http/session-route.ts`, `lib/security/session-context.ts` |
 | Time logic | `lib/services/time-tracking.service.ts` |
 | Admin logic | `lib/services/admin-dashboard.service.ts` |
-| Join logic | `lib/services/join.service.ts`, `lib/organization/metadata.ts` |
+| Join logic | `lib/services/join.service.ts`, `lib/services/join-request.service.ts`, `lib/organization/metadata.ts` |
 | Team / roles | `lib/services/organization-team.service.ts`, `lib/organization/roles.ts` |
 | Tests | `vitest.config.ts`, `lib/**/__tests__/*.test.ts`, `test/fixtures/` |
 | Validation | `lib/validators/time-tracking.ts`, `admin.ts`, `join.ts` |

@@ -2,10 +2,15 @@
 
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { FormEvent, useState } from 'react';
+import { FormEvent, useEffect, useState } from 'react';
+import { GoogleSignInButton } from '@/components/auth/google-sign-in-button';
 import { AuthBrand } from '@/components/auth-brand';
 import { authClient } from '@/lib/auth-client';
-import { isAdminRole } from '@/lib/organization/roles';
+import { completeSignInFlow } from '@/lib/auth/complete-sign-in';
+import {
+  buildOAuthCallbackURL,
+  buildOAuthErrorCallbackURL,
+} from '@/lib/auth/oauth-callback-url';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import {
@@ -22,6 +27,7 @@ import {
   FieldLabel,
 } from '@/components/ui/field';
 import { Input } from '@/components/ui/input';
+import { Separator } from '@/components/ui/separator';
 
 const IS_DEV = process.env.NODE_ENV === 'development';
 
@@ -37,6 +43,20 @@ export function LoginForm({
   const [password, setPassword] = useState(IS_DEV ? 'DemoPassword1!' : '');
   const [error, setError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+
+  useEffect(() => {
+    const error = searchParams.get('error');
+    if (error === 'oauth') {
+      setError('Google sign-in failed. Please try again or use email.');
+      return;
+    }
+
+    if (error === 'signup_disabled') {
+      setError(
+        'No account was found for this Google identity. Ask your administrator for an invitation link.'
+      );
+    }
+  }, [searchParams]);
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -54,38 +74,14 @@ export function LoginForm({
         return;
       }
 
-      const orgsResult = await authClient.organization.list();
-      const organizations = orgsResult.data ?? [];
+      const result = await completeSignInFlow(nextPath);
 
-      if (organizations.length === 0) {
-        router.replace('/onboarding');
-        router.refresh();
+      if (!result.ok) {
+        setError(result.error);
         return;
       }
 
-      const activeResult = await authClient.organization.setActive({
-        organizationId: organizations[0].id,
-      });
-
-      if (activeResult.error) {
-        setError(activeResult.error.message ?? 'Failed to set active organization.');
-        return;
-      }
-
-      const roleResult = await authClient.organization.getActiveMemberRole();
-      const role = roleResult.data?.role;
-
-      if (nextPath) {
-        router.replace(nextPath);
-        router.refresh();
-        return;
-      }
-
-      if (isAdminRole(role)) {
-        router.replace('/admin/overview');
-      } else {
-        router.replace('/employee/track');
-      }
+      router.replace(result.path);
       router.refresh();
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Sign in failed.');
@@ -93,6 +89,9 @@ export function LoginForm({
       setIsSubmitting(false);
     }
   };
+
+  const oauthCallbackURL = buildOAuthCallbackURL(nextPath);
+  const oauthErrorCallbackURL = buildOAuthErrorCallbackURL('/login', nextPath);
 
   return (
     <div className={cn('flex flex-col gap-6', className)} {...props}>
@@ -103,7 +102,23 @@ export function LoginForm({
           <CardDescription>Sign in to OmniShift</CardDescription>
         </CardHeader>
         <CardContent>
-          <form onSubmit={handleSubmit}>
+          <FieldGroup>
+            <GoogleSignInButton
+              callbackURL={oauthCallbackURL}
+              errorCallbackURL={oauthErrorCallbackURL}
+              disabled={isSubmitting}
+              onError={setError}
+            />
+            <div className="relative">
+              <div className="absolute inset-0 flex items-center">
+                <Separator />
+              </div>
+              <div className="relative flex justify-center text-xs uppercase">
+                <span className="bg-card px-2 text-muted-foreground">Or continue with email</span>
+              </div>
+            </div>
+          </FieldGroup>
+          <form onSubmit={handleSubmit} className="mt-6">
             <FieldGroup>
               <Field>
                 <FieldLabel htmlFor="email">Email</FieldLabel>
@@ -142,9 +157,9 @@ export function LoginForm({
                   {isSubmitting ? 'Signing in…' : 'Login'}
                 </Button>
                 <FieldDescription className="text-center">
-                  Don&apos;t have an account?{' '}
+                  Creating a new workspace?{' '}
                   <Link href="/register" className="underline-offset-4 hover:underline">
-                    Sign up
+                    Register as owner
                   </Link>
                 </FieldDescription>
               </Field>

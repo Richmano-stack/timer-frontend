@@ -20,6 +20,7 @@ export default defineConfig({
             '.next',
             '**/*.integration.test.ts',
             '**/request-magic-link/**/route.test.ts',
+            '**/organization/invitations/**/route.test.ts',
           ],
         },
       },
@@ -28,7 +29,12 @@ export default defineConfig({
         test: {
           name: 'integration',
           environment: 'node',
-          include: ['**/*.integration.test.ts', '**/request-magic-link/**/route.test.ts'],
+          include: [
+            '**/*.integration.test.ts',
+            '**/request-magic-link/**/route.test.ts',
+            '**/organization/invitations/**/route.test.ts',
+            'src/tests/integration/**/*.test.ts',
+          ],
           exclude: ['node_modules', '.next'],
           setupFiles: ['test/setup/integration-env.ts'],
           fileParallelism: false,

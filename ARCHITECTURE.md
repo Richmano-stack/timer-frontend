@@ -13,6 +13,7 @@ Use this document to navigate the repo when something breaks: start at the **sym
 | Layer | Technology |
 |-------|------------|
 | Framework | Next.js 16 (App Router), React 19 |
+| Client data | TanStack Query v5 (`app/providers.tsx`) |
 | Auth | Better Auth (`emailAndPassword`, `magicLink`, `organization` plugins) |
 | Database | PostgreSQL via Prisma |
 | Styling | Tailwind CSS 4, shadcn/ui-style components |
@@ -38,7 +39,7 @@ Prisma  →  PostgreSQL
 
 | Role | Typical paths |
 |------|----------------|
-| **Owner / Admin** | `/admin/overview`, `/admin/reports`, `/admin/team` |
+| **Owner / Admin** | `/admin/overview`, `/admin/reports`, `/admin/team`, `/admin/settings` |
 | **Member (agent)** | `/employee/track` |
 | **New owner** | `/register` → `/onboarding` → `/admin/overview` |
 | **New employee** | `/join/{orgSlug}` (magic link, no password) |
@@ -67,7 +68,7 @@ Unauthenticated users are redirected to `/login?next=...`.
 | `executeAuthenticatedRoute` | Any logged-in member of the active organization |
 | `executeAdminRoute` | `owner` or `admin` role only |
 
-Session context is resolved in `lib/security/session-context.ts` from the Better Auth session cookie and `activeOrganizationId`.
+Session context is resolved in `lib/security/session-context.ts` from the Better Auth session cookie and `activeOrganizationId`. Service layers must scope every multi-tenant Prisma query with `withOrganizationScope()` from `lib/security/organization-context.ts`; time-tracking services additionally call `resolveOrganizationContext(userId, organizationId)` before reads or mutations.
 
 ---
 
@@ -131,10 +132,16 @@ Org isolation: the organization is always resolved from **`orgSlug` in the URL**
   → GET /api/admin/timesheets
 
 /admin/team
-  → components/admin/TeamInviteDashboard.tsx
+  → app/(dashboard)/admin/team/_components/TeamInviteDashboard.tsx (TanStack Query)
   → GET /api/organization/team
+  → GET/POST/DELETE /api/organization/invitations
   → PATCH /api/organization/members/[memberId]/role
   → GET/PATCH /api/organization/join-settings
+
+/admin/settings
+  → app/(dashboard)/admin/settings/_components/OrganizationSettingsDashboard.tsx (TanStack Query)
+  → GET/PATCH /api/organization/settings
+  → GET/PATCH /api/organization/join-settings (domains + join policy)
 ```
 
 ---
@@ -156,7 +163,8 @@ Org isolation: the organization is always resolved from **`orgSlug` in the URL**
 | `/employee/track` | `app/(dashboard)/employee/track/page.tsx` | Employee time card |
 | `/admin/overview` | `app/(dashboard)/admin/overview/page.tsx` | Floor monitor |
 | `/admin/reports` | `app/(dashboard)/admin/reports/page.tsx` | Timesheets + CSV |
-| `/admin/team` | `app/(dashboard)/admin/team/page.tsx` | Join link + allowed domains |
+| `/admin/team` | `app/(dashboard)/admin/team/page.tsx` | Invite-first team command center |
+| `/admin/settings` | `app/(dashboard)/admin/settings/page.tsx` | Workspace config (name, timezone, join policy) |
 | `/billing/checkout` | `app/(dashboard)/billing/checkout/page.tsx` | Billing placeholder |
 | `/track` | `app/track/page.tsx` | Redirect to `/employee/track` |
 | `/developer/sandbox` | `app/developer/sandbox/page.tsx` | Dev-only API sandbox |
@@ -166,8 +174,8 @@ Org isolation: the organization is always resolved from **`orgSlug` in the URL**
 | File | Purpose |
 |------|---------|
 | `app/(dashboard)/admin/layout.tsx` | Admin role guard + wraps pages in `AdminShell` sidebar |
-| `components/layout/AdminShell.tsx` | Persistent admin nav (Floor Monitor, Reports, Team) |
-| `app/layout.tsx` | Root HTML shell |
+| `components/layout/AdminShell.tsx` | Persistent admin nav (Floor Monitor, Team, Settings, Reports) |
+| `app/layout.tsx` | Root HTML shell + `Providers` (TanStack Query) |
 | `app/globals.css` | Global styles / theme |
 
 #### API routes
@@ -185,6 +193,9 @@ Org isolation: the organization is always resolved from **`orgSlug` in the URL**
 | `GET /api/organization/team` | `app/api/organization/team/route.ts` | Org members + actor role (admin) |
 | `PATCH /api/organization/members/[memberId]/role` | `app/api/organization/members/[memberId]/role/route.ts` | Change member role (admin) |
 | `GET/PATCH /api/organization/join-settings` | `app/api/organization/join-settings/route.ts` | Allowed domains + join URL |
+| `GET/PATCH /api/organization/settings` | `app/api/organization/settings/route.ts` | Display name + timezone |
+| `GET/POST /api/organization/invitations` | `app/api/organization/invitations/route.ts` | List/create invitations |
+| `DELETE /api/organization/invitations/[id]` | `app/api/organization/invitations/[id]/route.ts` | Revoke invitation |
 | `POST /api/join/request-magic-link` | `app/api/join/request-magic-link/route.ts` | Domain check + send magic link |
 
 All custom APIs return `{ success, data }` or `{ success: false, error: { code, message } }` via `lib/http/api-handler.ts`.
@@ -210,7 +221,8 @@ All custom APIs return `{ success, data }` or `{ success: false, error: { code, 
 | `admin/LiveFloorTable.tsx` | Live agent table |
 | `admin/AgentDetailDrawer.tsx` | Per-agent day detail |
 | `admin/AdminReportsDashboard.tsx` | Timesheets + CSV export |
-| `admin/TeamInviteDashboard.tsx` | Shareable join link, domain config, members |
+| `app/(dashboard)/admin/team/_components/TeamInviteDashboard.tsx` | Invite-first team command center |
+| `app/(dashboard)/admin/settings/_components/OrganizationSettingsDashboard.tsx` | Workspace settings (name, timezone, domains, join policy) |
 | `developer/ApiSandboxDashboard.tsx` | Dev API playground |
 | `layout/EmployeeShell.tsx` | Employee page chrome |
 | `layout/AppLogo.tsx` | App logo |
@@ -244,6 +256,7 @@ Reusable shadcn-style building blocks: `button`, `input`, `card`, `field`, `Tabl
 | File | Purpose |
 |------|---------|
 | `db/prisma.ts` | Prisma client singleton |
+| `db/audit.ts` | Append-only audit log writes (`writeAuditLog`, `AuditAction`, typed helpers) |
 
 #### HTTP
 
@@ -258,7 +271,7 @@ Reusable shadcn-style building blocks: `button`, `input`, `card`, `field`, `Tabl
 | File | Purpose |
 |------|---------|
 | `security/session-context.ts` | Resolve user + org + role from session |
-| `security/organization-context.ts` | Verify membership for time-tracking ops |
+| `security/organization-context.ts` | Verify membership; `withOrganizationScope()` for tenant-scoped Prisma filters |
 | `security/activity-status.ts` | Resolve activity status records |
 | `security/middleware-session.ts` | Cookie check for edge middleware |
 
@@ -268,6 +281,7 @@ Reusable shadcn-style building blocks: `button`, `input`, `card`, `field`, `Tabl
 |------|---------|
 | `services/time-tracking.service.ts` | Clock in/out, status transitions, my-day aggregation |
 | `services/admin-dashboard.service.ts` | Floor overview, compliance alerts, timesheets |
+| `services/organization-settings.service.ts` | Organization display name + timezone in metadata |
 | `services/join.service.ts` | Join by slug, domain validation, member creation, join settings |
 | `services/organization-bootstrap.service.ts` | Seed default activity statuses |
 | `services/organization-team.service.ts` | Team roster + role updates for admin UI |
@@ -276,7 +290,7 @@ Reusable shadcn-style building blocks: `button`, `input`, `card`, `field`, `Tabl
 
 | File | Purpose |
 |------|---------|
-| `organization/metadata.ts` | Parse/serialize `allowedDomains` in `Organization.metadata` |
+| `organization/metadata.ts` | Parse/serialize `allowedDomains`, `requireApproval`, `timezone` in `Organization.metadata` |
 | `organization/roles.ts` | Role helpers: `isAdminRole`, `canAssignRole`, `canEditMemberRole` |
 
 #### Validators (Zod)
@@ -358,10 +372,26 @@ User
   └── Member ── Organization
                     ├── ActivityStatus  (per-org status definitions)
                     ├── TimeLog         (clock segments; open segment = endTime null)
-                    └── metadata (JSON: allowedDomains)
+                    ├── AuditLog        (append-only security audit trail)
+                    └── metadata (JSON: allowedDomains, requireApproval, timezone)
 
 Better Auth tables: Session, Account, Verification, Invitation
 ```
+
+#### Audit log (`AuditLog`)
+
+Append-only, tenant-scoped security events. Every row requires `organizationId` and `actorUserId`. Application code must never update or delete audit rows.
+
+| Field | Purpose |
+|-------|---------|
+| `action` | Event name (e.g. `invitation.sent`, `member.role_changed`) |
+| `targetType` / `targetId` | Entity affected (`invitation`, `join_request`, `member`, `organization`) |
+| `metadata` | JSON payload (before/after snapshots, email, role, etc.) |
+| `createdAt` | UTC `timestamptz` |
+
+Helper API: `lib/db/audit.ts` — `writeAuditLog`, `AuditAction` constants, and typed wrappers (`auditInvitationSent`, `auditJoinRequestApproved`, etc.). Audit writes are **non-blocking**: failures are logged to stderr and do not throw, so primary mutations are never rolled back due to audit pipeline errors.
+
+Phase 1 events (wiring in follow-up PR): `invitation.sent`, `invitation.accepted`, `join_request.approved`, `join_request.denied`, `member.role_changed`, `domain_whitelist.updated`.
 
 #### Time log model
 
@@ -379,6 +409,11 @@ Better Auth tables: Session, Account, Verification, Invitation
 | `BETTER_AUTH_SECRET` | Auth signing secret |
 | `BETTER_AUTH_URL` | Server-side auth base URL |
 | `NEXT_PUBLIC_APP_URL` | Public app URL (magic link callbacks, join links) |
+| `EMAIL_FROM` | Sender address for transactional email (required in production) |
+| `EMAIL_PROVIDER` | `resend` (default), `postmark`, or `sendgrid` |
+| `RESEND_API_KEY` | Resend API key (required in production when provider is `resend`) |
+| `POSTMARK_SERVER_TOKEN` | Postmark server token (required when provider is `postmark`) |
+| `SENDGRID_API_KEY` | SendGrid API key (required when provider is `sendgrid`) |
 
 Local Postgres: `docker compose up -d` (port **5434**).
 
@@ -389,8 +424,8 @@ Local Postgres: `docker compose up -d` (port **5434**).
 | Symptom | Where to look |
 |---------|----------------|
 | Login / session issues | `lib/auth.ts`, `app/api/auth/`, `middleware.ts` |
-| Magic link / join fails | `app/api/join/`, `lib/services/join.service.ts`, `sendMagicLink` stub in `lib/auth.ts` |
-| Wrong org / tenant leak | `lib/security/session-context.ts`, `join.service.ts` (slug resolution) |
+| Magic link / join fails | `app/api/join/`, `lib/services/join.service.ts`, `lib/email/send.ts`, `sendMagicLink` in `lib/auth.ts` |
+| Wrong org / tenant leak | `lib/security/session-context.ts`, `lib/security/organization-context.ts`, service layers |
 | Clock in/out / status bugs | `lib/services/time-tracking.service.ts`, `hooks/useTimeTracking.ts` |
 | Admin floor wrong / stale | `lib/services/admin-dashboard.service.ts`, `AdminOverviewDashboard.tsx` |
 | Domain rejected on join | `lib/organization/metadata.ts`, `/api/organization/join-settings` |
@@ -401,7 +436,7 @@ Local Postgres: `docker compose up -d` (port **5434**).
 
 - Demo login: `demo@example.com` / `DemoPassword1!`
 - Demo join URL: `http://localhost:3000/join/demo-company` (requires `@example.com` email)
-- Magic links are logged to the server console (no real email in dev)
+- Magic links are logged to the server console when no email provider is configured (dev only)
 - API sandbox: `/developer/sandbox` (dev only)
 
 ---
