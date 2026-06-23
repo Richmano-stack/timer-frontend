@@ -44,19 +44,26 @@ async function ensureDemoUser() {
 async function main() {
   const userId = await ensureDemoUser();
 
-  const joinMetadata = serializeOrganizationMetadata(createDefaultJoinMetadata(DEMO_EMAIL));
+  const joinMetadata = serializeOrganizationMetadata({
+    ...createDefaultJoinMetadata(DEMO_EMAIL),
+    timezone: 'America/New_York',
+  });
 
   const organization = await prisma.organization.upsert({
     where: { slug: 'demo-company' },
     update: {
       name: 'Demo Company',
       metadata: joinMetadata,
+      timezone: 'America/New_York',
+      joinPolicy: 'INVITE_ONLY',
     },
     create: {
       id: DEMO_ORG_ID,
       name: 'Demo Company',
       slug: 'demo-company',
       metadata: joinMetadata,
+      timezone: 'America/New_York',
+      joinPolicy: 'INVITE_ONLY',
     },
   });
 

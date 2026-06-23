@@ -1,6 +1,9 @@
 import { prisma } from '@/lib/db/prisma';
 import { fail, TimeTrackingErrorCodes } from '@/lib/errors/time-tracking';
 import {
+  joinPolicyToRequireApproval,
+} from '@/lib/organization/join-policy';
+import {
   parseOrganizationMetadata,
   serializeOrganizationMetadata,
   type OrganizationJoinMetadata,
@@ -11,7 +14,7 @@ export interface OrganizationSettings {
   organizationId: string;
   name: string;
   slug: string;
-  timezone: string | null;
+  timezone: string;
   allowedDomains: string[];
   requireApproval: boolean;
 }
@@ -25,7 +28,7 @@ export async function getOrganizationSettingsForAdmin(
 ): Promise<ServiceResult<OrganizationSettings>> {
   const organization = await prisma.organization.findUnique({
     where: { id: organizationId },
-    select: { id: true, name: true, slug: true, metadata: true },
+    select: { id: true, name: true, slug: true, metadata: true, timezone: true, joinPolicy: true },
   });
 
   if (!organization) {
@@ -40,9 +43,9 @@ export async function getOrganizationSettingsForAdmin(
       organizationId: organization.id,
       name: organization.name,
       slug: organization.slug,
-      timezone: metadata.timezone ?? null,
+      timezone: organization.timezone,
       allowedDomains: metadata.allowedDomains,
-      requireApproval: metadata.requireApproval === true,
+      requireApproval: joinPolicyToRequireApproval(organization.joinPolicy),
     },
   };
 }
@@ -53,7 +56,7 @@ export async function updateOrganizationSettings(
 ): Promise<ServiceResult<OrganizationSettings>> {
   const organization = await prisma.organization.findUnique({
     where: { id: organizationId },
-    select: { id: true, name: true, slug: true, metadata: true },
+    select: { id: true, name: true, slug: true, metadata: true, timezone: true },
   });
 
   if (!organization) {
@@ -61,7 +64,7 @@ export async function updateOrganizationSettings(
   }
 
   const currentMetadata = resolveOrganizationMetadata(organization.metadata);
-  const data: { name?: string; metadata?: string } = {};
+  const data: { name?: string; metadata?: string; timezone?: string } = {};
 
   if (updates.name !== undefined) {
     data.name = updates.name;
@@ -73,6 +76,7 @@ export async function updateOrganizationSettings(
       timezone: updates.timezone,
     };
     data.metadata = serializeOrganizationMetadata(nextMetadata);
+    data.timezone = updates.timezone;
   }
 
   await prisma.organization.update({

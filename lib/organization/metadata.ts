@@ -1,8 +1,14 @@
 export interface OrganizationJoinMetadata {
   allowedDomains: string[];
+  /** Join approval gate — mirrored in Organization.joinPolicy column (TKT-201); kept in JSON during transition. */
   requireApproval?: boolean;
-  /** IANA timezone for reporting boundaries (Phase 1 metadata JSON). */
+  /** IANA timezone — mirrored in Organization.timezone column (TKT-201); kept in JSON during transition. */
   timezone?: string;
+  /**
+   * Max continuous open-shift hours before automated clock-out (TKT-207).
+   * Superseded by the TKT-206 compliance engine when available.
+   */
+  maxShiftHours?: number;
 }
 
 export function parseOrganizationMetadata(
@@ -29,10 +35,18 @@ export function parseOrganizationMetadata(
         ? parsed.timezone.trim()
         : undefined;
 
+    const maxShiftHours =
+      typeof parsed.maxShiftHours === 'number' &&
+      Number.isFinite(parsed.maxShiftHours) &&
+      parsed.maxShiftHours > 0
+        ? parsed.maxShiftHours
+        : undefined;
+
     return {
       allowedDomains,
       ...(requireApproval !== undefined ? { requireApproval } : {}),
       ...(timezone !== undefined ? { timezone } : {}),
+      ...(maxShiftHours !== undefined ? { maxShiftHours } : {}),
     };
   } catch {
     return null;
@@ -48,6 +62,9 @@ export function serializeOrganizationMetadata(metadata: OrganizationJoinMetadata
   }
   if (metadata.timezone !== undefined) {
     payload.timezone = metadata.timezone;
+  }
+  if (metadata.maxShiftHours !== undefined) {
+    payload.maxShiftHours = metadata.maxShiftHours;
   }
   return JSON.stringify(payload);
 }

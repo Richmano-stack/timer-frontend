@@ -2,8 +2,9 @@
 
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { FormEvent, useMemo, useState } from 'react';
+import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { X } from 'lucide-react';
+import { Palette, X } from 'lucide-react';
 import {
   formatTimezoneLabel,
   getBrowserTimezone,
@@ -430,6 +431,37 @@ export function OrganizationSettingsDashboard() {
                       {domainsMutation.isPending ? 'Saving…' : 'Save domains'}
                     </Button>
                   </div>
+                </CardContent>
+              </Card>
+
+              <Card>
+                <CardHeader>
+                  <CardTitle>Compliance</CardTitle>
+                  <CardDescription>
+                    Review security-sensitive changes recorded in your workspace audit log
+                  </CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <Button variant="outline" asChild>
+                    <Link href="/admin/settings/audit">View audit trail</Link>
+                  </Button>
+                </CardContent>
+              </Card>
+
+              <Card>
+                <CardHeader>
+                  <CardTitle>Activity statuses</CardTitle>
+                  <CardDescription>
+                    Customize trackable employee states, display colors, and billable flags
+                  </CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <Button variant="outline" asChild>
+                    <Link href="/admin/settings/statuses">
+                      <Palette data-icon="inline-start" />
+                      Manage activity statuses
+                    </Link>
+                  </Button>
                 </CardContent>
               </Card>
 

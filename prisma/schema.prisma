@@ -20,6 +20,17 @@ enum JoinRequestStatus {
   DENIED
 }
 
+enum IdempotencyStatus {
+  PENDING
+  COMPLETED
+}
+
+enum JoinPolicy {
+  INVITE_ONLY
+  DOMAIN_APPROVAL
+  DOMAIN_AUTO
+}
+
 model User {
   id            String    @id
   name          String
@@ -33,8 +44,9 @@ model User {
   members       Member[]
   invitations   Invitation[] @relation("Inviter")
   joinRequests  JoinRequest[]
-  timeLogs      TimeLog[]
-  auditLogs     AuditLog[]     @relation("AuditActor")
+  timeLogs         TimeLog[]
+  auditLogs        AuditLog[]        @relation("AuditActor")
+  idempotencyKeys  IdempotencyKey[]
 
   @@map("user")
 }
@@ -93,6 +105,8 @@ model Organization {
   slug             String           @unique
   logo             String?
   metadata         String?
+  timezone         String           @default("UTC")
+  joinPolicy       JoinPolicy       @default(INVITE_ONLY)
   createdAt        DateTime         @default(now())
   updatedAt        DateTime         @updatedAt
   members          Member[]
@@ -101,6 +115,7 @@ model Organization {
   activityStatuses ActivityStatus[]
   timeLogs         TimeLog[]
   auditLogs        AuditLog[]
+  idempotencyKeys  IdempotencyKey[]
 
   @@map("organization")
 }
@@ -202,4 +217,24 @@ model AuditLog {
   @@index([organizationId, createdAt])
   @@index([organizationId, action])
   @@map("audit_log")
+}
+
+/// Deduplicates retried time-tracking mutations per tenant member (TKT-209).
+model IdempotencyKey {
+  id               String            @id @default(uuid())
+  organizationId   String
+  userId           String
+  operation        String
+  key              String
+  requestHash      String
+  status           IdempotencyStatus @default(PENDING)
+  responseSnapshot Json?
+  expiresAt        DateTime          @db.Timestamptz(3)
+  createdAt        DateTime          @default(now()) @db.Timestamptz(3)
+  organization     Organization      @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  user             User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([organizationId, userId, operation, key])
+  @@index([expiresAt])
+  @@map("idempotency_key")
 }
