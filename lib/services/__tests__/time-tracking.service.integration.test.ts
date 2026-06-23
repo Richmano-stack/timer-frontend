@@ -84,6 +84,74 @@ describe.skipIf(!dbReady)('time-tracking clock-in concurrency (integration)', ()
     });
     expect(openCount).toBe(0);
   });
+
+  it('deduplicates parallel identical clock-in requests with the same idempotency key', async () => {
+    const { clockInService } = await import('@/lib/services/time-tracking.service');
+    const {
+      hashIdempotencyPayload,
+      IdempotencyOperations,
+      withIdempotency,
+    } = await import('@/lib/services/idempotency.service');
+    const userId = fixtures.tenantA.member.id;
+    const organizationId = fixtures.tenantA.organizationId;
+    const scope = {
+      organizationId,
+      userId,
+      operation: IdempotencyOperations.CLOCK_IN,
+      key: 'parallel-clock-in-key',
+    };
+    const requestHash = hashIdempotencyPayload({});
+
+    const results = await Promise.all(
+      Array.from({ length: 2 }, () =>
+        withIdempotency(scope, requestHash, () => clockInService(userId, organizationId))
+      )
+    );
+
+    expect(results.every((result) => result.success)).toBe(true);
+    if (results[0].success && results[1].success) {
+      expect(results[0].data.segment.id).toBe(results[1].data.segment.id);
+    }
+
+    const openCount = await prisma.timeLog.count({
+      where: { userId, organizationId, endTime: null },
+    });
+    expect(openCount).toBe(1);
+  });
+
+  it('rejects idempotency key reuse with a different payload', async () => {
+    const { clockInService } = await import('@/lib/services/time-tracking.service');
+    const {
+      hashIdempotencyPayload,
+      IdempotencyOperations,
+      withIdempotency,
+    } = await import('@/lib/services/idempotency.service');
+    const userId = fixtures.tenantA.member.id;
+    const organizationId = fixtures.tenantA.organizationId;
+    const scope = {
+      organizationId,
+      userId,
+      operation: IdempotencyOperations.CLOCK_IN,
+      key: 'conflict-clock-in-key',
+    };
+
+    const first = await withIdempotency(
+      scope,
+      hashIdempotencyPayload({ notes: 'first' }),
+      () => clockInService(userId, organizationId, 'first')
+    );
+    expect(first.success).toBe(true);
+
+    const second = await withIdempotency(
+      scope,
+      hashIdempotencyPayload({ notes: 'second' }),
+      () => clockInService(userId, organizationId, 'second')
+    );
+    expect(second.success).toBe(false);
+    if (!second.success) {
+      expect(second.error.code).toBe(TimeTrackingErrorCodes.IDEMPOTENCY_KEY_CONFLICT);
+    }
+  });
 });
 
 if (!dbReady) {

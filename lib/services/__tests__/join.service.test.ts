@@ -307,6 +307,7 @@ describe('updateJoinSettings', () => {
       expect.objectContaining({
         data: {
           metadata: JSON.stringify({ allowedDomains: ['beta.com', 'acme.com'] }),
+          joinPolicy: 'INVITE_ONLY',
         },
       })
     );

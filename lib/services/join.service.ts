@@ -4,6 +4,10 @@ import { prisma } from '@/lib/db/prisma';
 import { JoinErrorCodes } from '@/lib/errors/join';
 import { fail as joinFail } from '@/lib/errors/join-service';
 import {
+  joinPolicyToRequireApproval,
+  requireApprovalToJoinPolicy,
+} from '@/lib/organization/join-policy';
+import {
   createDefaultJoinMetadata,
   emailMatchesAllowedDomains,
   parseOrganizationMetadata,
@@ -525,7 +529,7 @@ export async function getJoinSettingsForAdmin(
 ): Promise<ServiceResult<JoinSettings>> {
   const organization = await prisma.organization.findUnique({
     where: { id: organizationId },
-    select: { id: true, name: true, slug: true, metadata: true },
+    select: { id: true, name: true, slug: true, metadata: true, joinPolicy: true },
   });
 
   if (!organization) {
@@ -541,7 +545,7 @@ export async function getJoinSettingsForAdmin(
       organizationName: organization.name,
       organizationSlug: organization.slug,
       allowedDomains: joinMetadata.allowedDomains,
-      requireApproval: joinMetadata.requireApproval === true,
+      requireApproval: joinPolicyToRequireApproval(organization.joinPolicy),
       joinUrl: `${baseUrl}/join/${organization.slug}`,
     },
   };
@@ -561,14 +565,20 @@ export async function updateJoinSettings(
   }
 
   const current = resolveJoinMetadata(organization.metadata);
+  const requireApproval = updates.requireApproval ?? current.requireApproval;
   const metadata: OrganizationJoinMetadata = {
+    ...current,
     allowedDomains: updates.allowedDomains ?? current.allowedDomains,
-    requireApproval: updates.requireApproval ?? current.requireApproval,
+    requireApproval,
   };
+  const joinPolicy = requireApprovalToJoinPolicy(requireApproval);
 
   await prisma.organization.update({
     where: { id: organizationId },
-    data: { metadata: serializeOrganizationMetadata(metadata) },
+    data: {
+      metadata: serializeOrganizationMetadata(metadata),
+      joinPolicy,
+    },
   });
 
   const baseUrl = process.env.NEXT_PUBLIC_APP_URL ?? 'http://localhost:3000';
@@ -580,7 +590,7 @@ export async function updateJoinSettings(
       organizationName: organization.name,
       organizationSlug: organization.slug,
       allowedDomains: metadata.allowedDomains,
-      requireApproval: metadata.requireApproval === true,
+      requireApproval: joinPolicyToRequireApproval(joinPolicy),
       joinUrl: `${baseUrl}/join/${organization.slug}`,
     },
   };

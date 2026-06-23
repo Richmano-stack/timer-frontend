@@ -58,6 +58,14 @@ RESEND_API_KEY=<resend-api-key>
 # EMAIL_PROVIDER=resend   # resend (default) | postmark | sendgrid
 # POSTMARK_SERVER_TOKEN=    # when EMAIL_PROVIDER=postmark
 # SENDGRID_API_KEY=         # when EMAIL_PROVIDER=sendgrid
+
+# Cron (optional in local dev; required in production)
+CRON_SECRET=<random-cron-secret>
+
+# Sentry (optional in local dev; SENTRY_DSN required in production)
+# Server/edge use SENTRY_DSN; browser needs NEXT_PUBLIC_SENTRY_DSN (same ingest URL).
+SENTRY_DSN=https://<key>@o<org>.ingest.sentry.io/<project>
+NEXT_PUBLIC_SENTRY_DSN=https://<key>@o<org>.ingest.sentry.io/<project>
 ```
 
 #### Google OAuth setup
@@ -111,6 +119,15 @@ pnpm test:db:down     # Stop test Postgres
 Optional k6 load test: see [loadtests/README.md](./loadtests/README.md).
 
 CI (`.github/workflows/ci.yml`) runs `pnpm lint` and `pnpm test:run` (unit) on every push and pull request.
+
+### Scheduled auto clock-out (cron)
+
+`POST` or `GET` `/api/cron/auto-clock-out` closes open shifts that exceed the org threshold (default **12 hours**; override via `Organization.metadata.maxShiftHours`). Authenticate with `x-cron-secret` or `Authorization: Bearer <CRON_SECRET>`.
+
+```bash
+curl -X POST http://localhost:3000/api/cron/auto-clock-out \
+  -H "x-cron-secret: $CRON_SECRET"
+```
 
 ---
 

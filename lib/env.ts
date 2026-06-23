@@ -21,10 +21,29 @@ const envSchema = z
     RESEND_API_KEY: z.string().optional(),
     POSTMARK_SERVER_TOKEN: z.string().optional(),
     SENDGRID_API_KEY: z.string().optional(),
+    CRON_SECRET: z.string().optional(),
+    SENTRY_DSN: z.string().optional(),
+    NEXT_PUBLIC_SENTRY_DSN: z.string().optional(),
   })
   .superRefine((data, ctx) => {
     if (!isProduction) {
       return;
+    }
+
+    if (!data.CRON_SECRET?.trim()) {
+      ctx.addIssue({
+        code: 'custom',
+        message: 'CRON_SECRET is required in production.',
+        path: ['CRON_SECRET'],
+      });
+    }
+
+    if (!data.SENTRY_DSN?.trim()) {
+      ctx.addIssue({
+        code: 'custom',
+        message: 'SENTRY_DSN is required in production.',
+        path: ['SENTRY_DSN'],
+      });
     }
 
     if (!data.EMAIL_FROM?.trim()) {
@@ -79,4 +98,8 @@ export const emailConfig = {
   resendApiKey: env.RESEND_API_KEY?.trim() ?? '',
   postmarkServerToken: env.POSTMARK_SERVER_TOKEN?.trim() ?? '',
   sendgridApiKey: env.SENDGRID_API_KEY?.trim() ?? '',
+};
+
+export const cronConfig = {
+  secret: env.CRON_SECRET?.trim() ?? '',
 };

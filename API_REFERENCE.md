@@ -70,6 +70,25 @@ POST/PATCH endpoints expect:
 Content-Type: application/json
 ```
 
+### Idempotency (time mutations)
+
+State-changing time routes (`POST /api/time/clock-in`, `clock-out`, `status`) accept an optional deduplication header:
+
+```http
+Idempotency-Key: <client-generated-uuid>
+```
+
+| Rule | Behavior |
+|------|----------|
+| Scope | `(organizationId, userId, operation, key)` — never global |
+| Same key + same payload | Returns the cached response; no duplicate DB writes |
+| Same key + different payload | `409` `IDEMPOTENCY_KEY_CONFLICT` |
+| Parallel in-flight retries | Wait for the first request to finish, then return the same cached response |
+| TTL | Records expire after **24 hours** |
+| Omitted header | Normal one-shot mutation (no deduplication) |
+
+Key format: 1–128 characters, `[A-Za-z0-9_-]`. The web client generates `crypto.randomUUID()` per user action in `hooks/useTimeTracking.ts`.
+
 ### Timestamps
 
 `DateTime` fields from services are serialized as **ISO 8601 UTC strings** (e.g. `"2026-06-10T12:40:25.170Z"`).
@@ -154,6 +173,12 @@ Time is stored as **flat `TimeLog` segments** (not separate shift + activity tab
 
 Starts a new shift by creating an open `TimeLog` segment. Fails with `409` if the user already has an open segment (`endTime IS NULL`).
 
+### Request headers
+
+| Header | Required | Notes |
+|--------|----------|-------|
+| `Idempotency-Key` | Optional | See [Idempotency](#idempotency-time-mutations) |
+
 ### Request body
 
 | Field | Type | Required | Notes |
@@ -200,6 +225,8 @@ Empty body `{}` is valid.
 | `NO_ACTIVE_ORGANIZATION` | 403 | Session has no active org |
 | `USER_NOT_IN_COMPANY` | 403 | Not a member of active org |
 | `USER_ALREADY_CLOCKED_IN` | 409 | Open segment already exists |
+| `IDEMPOTENCY_KEY_CONFLICT` | 409 | Key reused with a different payload |
+| `IDEMPOTENCY_IN_PROGRESS` | 409 | Parallel retry timed out waiting for in-flight request |
 | `VALIDATION_ERROR` | 400 | Invalid JSON or body |
 
 ---
@@ -210,6 +237,12 @@ Empty body `{}` is valid.
 **Service:** `clockOutService()`
 
 Closes the user's open `TimeLog` segment (`endTime = now`).
+
+### Request headers
+
+| Header | Required | Notes |
+|--------|----------|-------|
+| `Idempotency-Key` | Optional | See [Idempotency](#idempotency-time-mutations) |
 
 ### Request body
 
@@ -246,6 +279,12 @@ None (empty body or `{}`).
 Switches activity on an open shift. Closes the current segment and opens a new one for the target status.
 
 Omit both `statusId` and `statusName` to switch to **Available**.
+
+### Request headers
+
+| Header | Required | Notes |
+|--------|----------|-------|
+| `Idempotency-Key` | Optional | See [Idempotency](#idempotency-time-mutations) |
 
 ### Request body
 
@@ -1124,6 +1163,7 @@ GET /api/auth/magic-link/verify?token=...&callbackURL=/join/invite/{token}/compl
 | `member` | `Member` | User ↔ org membership and role |
 | `activity_status` | `ActivityStatus` | Per-org status definitions |
 | `time_log` | `TimeLog` | Clock segments (shift + status history) |
+| `idempotency_key` | `IdempotencyKey` | Deduplicated time mutation retries (24h TTL) |
 | `invitation` | `Invitation` | Org invitations (`id` is redemption token; status, expiresAt) |
 | `join_request` | `JoinRequest` | Queued self-serve join requests (`PENDING` / `APPROVED` / `DENIED`) |
 

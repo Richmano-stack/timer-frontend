@@ -32,9 +32,17 @@ export async function isTestDatabaseReady(): Promise<boolean> {
 
 export async function migrateTestDatabase(): Promise<void> {
   const { execSync } = await import('node:child_process');
-  execSync('pnpm exec prisma migrate deploy', {
+  const { resolve } = await import('node:path');
+  const prismaBin = resolve(
+    process.cwd(),
+    'node_modules',
+    '.bin',
+    process.platform === 'win32' ? 'prisma.cmd' : 'prisma'
+  );
+  execSync(`"${prismaBin}" migrate deploy`, {
     env: { ...process.env, DATABASE_URL: TEST_DATABASE_URL },
     stdio: 'pipe',
+    shell: true,
   });
 }
 
@@ -251,6 +259,9 @@ export interface TenantIsolationFixtures {
 }
 
 export async function resetTenantIsolationTestData(prisma: PrismaClient): Promise<void> {
+  await prisma.idempotencyKey.deleteMany({
+    where: { organization: { slug: { startsWith: ISOLATION_SLUG_PREFIX } } },
+  });
   await prisma.timeLog.deleteMany({
     where: { organization: { slug: { startsWith: ISOLATION_SLUG_PREFIX } } },
   });
@@ -382,6 +393,116 @@ export async function seedTenantIsolationFixtures(
   return { tenantA, tenantB };
 }
 
+export async function resetActivityStatusTestData(prisma: PrismaClient): Promise<void> {
+  await prisma.timeLog.deleteMany({
+    where: { organization: { slug: { startsWith: 'test-activity-status-' } } },
+  });
+  await prisma.activityStatus.deleteMany({
+    where: { organization: { slug: { startsWith: 'test-activity-status-' } } },
+  });
+  await prisma.member.deleteMany({
+    where: { organization: { slug: { startsWith: 'test-activity-status-' } } },
+  });
+  await prisma.user.deleteMany({
+    where: { email: { endsWith: '@activity-status-test.local' } },
+  });
+  await prisma.organization.deleteMany({
+    where: { slug: { startsWith: 'test-activity-status-' } },
+  });
+}
+
+export interface ActivityStatusTestFixtures {
+  organizationId: string;
+  organizationSlug: string;
+  owner: { id: string; email: string };
+  admin: { id: string; email: string };
+  member: { id: string; email: string };
+  availableStatusId: string;
+}
+
+export async function seedActivityStatusTestFixtures(
+  prisma: PrismaClient,
+  slug = 'test-activity-status-org'
+): Promise<ActivityStatusTestFixtures> {
+  const organizationId = `test-org-${slug}`;
+
+  await prisma.organization.upsert({
+    where: { slug },
+    create: {
+      id: organizationId,
+      name: 'Activity Status Test Org',
+      slug,
+    },
+    update: {
+      name: 'Activity Status Test Org',
+    },
+  });
+
+  const owner = { id: 'test-activity-status-owner', email: 'owner@activity-status-test.local' };
+  const admin = { id: 'test-activity-status-admin', email: 'admin@activity-status-test.local' };
+  const member = { id: 'test-activity-status-member', email: 'member@activity-status-test.local' };
+
+  for (const user of [owner, admin, member]) {
+    await prisma.user.upsert({
+      where: { id: user.id },
+      create: {
+        id: user.id,
+        name: user.email.split('@')[0] ?? user.id,
+        email: user.email,
+        emailVerified: true,
+      },
+      update: {
+        email: user.email,
+        emailVerified: true,
+      },
+    });
+  }
+
+  const memberships = [
+    { id: 'test-activity-status-member-owner', userId: owner.id, role: 'owner' },
+    { id: 'test-activity-status-member-admin', userId: admin.id, role: 'admin' },
+    { id: 'test-activity-status-member-agent', userId: member.id, role: 'member' },
+  ];
+
+  for (const membership of memberships) {
+    await prisma.member.upsert({
+      where: { id: membership.id },
+      create: {
+        id: membership.id,
+        organizationId,
+        userId: membership.userId,
+        role: membership.role,
+      },
+      update: {
+        role: membership.role,
+      },
+    });
+  }
+
+  const { seedDefaultActivityStatuses } = await import(
+    '@/lib/services/organization-bootstrap.service'
+  );
+  await seedDefaultActivityStatuses(organizationId);
+
+  const availableStatus = await prisma.activityStatus.findFirst({
+    where: { organizationId, name: 'Available' },
+    select: { id: true },
+  });
+
+  if (!availableStatus) {
+    throw new Error(`Missing Available status for activity status test org ${slug}`);
+  }
+
+  return {
+    organizationId,
+    organizationSlug: slug,
+    owner,
+    admin,
+    member,
+    availableStatusId: availableStatus.id,
+  };
+}
+
 export async function seedJoinTestInvitation(
   prisma: PrismaClient,
   options: {
@@ -408,4 +529,127 @@ export async function seedJoinTestInvitation(
       inviterId: options.inviterId,
     },
   });
+}
+
+const AUDIT_LOG_SLUG_PREFIX = 'test-audit-log-';
+const AUDIT_LOG_EMAIL_DOMAIN = '@audit-log-test.local';
+
+export interface AuditLogTestFixtures {
+  organizationId: string;
+  organizationSlug: string;
+  owner: { id: string; email: string };
+  admin: { id: string; email: string };
+  member: { id: string; email: string };
+}
+
+export async function resetAuditLogTestData(prisma: PrismaClient): Promise<void> {
+  await prisma.auditLog.deleteMany({
+    where: { organization: { slug: { startsWith: AUDIT_LOG_SLUG_PREFIX } } },
+  });
+  await prisma.member.deleteMany({
+    where: { organization: { slug: { startsWith: AUDIT_LOG_SLUG_PREFIX } } },
+  });
+  await prisma.user.deleteMany({
+    where: { email: { endsWith: AUDIT_LOG_EMAIL_DOMAIN } },
+  });
+  await prisma.organization.deleteMany({
+    where: { slug: { startsWith: AUDIT_LOG_SLUG_PREFIX } },
+  });
+}
+
+export async function seedAuditLogTestFixtures(
+  prisma: PrismaClient,
+  slug = 'test-audit-log-org-a'
+): Promise<AuditLogTestFixtures> {
+  const organizationId = `test-org-${slug}`;
+
+  await prisma.organization.upsert({
+    where: { slug },
+    create: {
+      id: organizationId,
+      name: 'Audit Log Test Org',
+      slug,
+    },
+    update: {
+      name: 'Audit Log Test Org',
+    },
+  });
+
+  const owner = { id: `test-audit-log-owner-${slug}`, email: `owner-${slug}${AUDIT_LOG_EMAIL_DOMAIN}` };
+  const admin = { id: `test-audit-log-admin-${slug}`, email: `admin-${slug}${AUDIT_LOG_EMAIL_DOMAIN}` };
+  const member = { id: `test-audit-log-member-${slug}`, email: `member-${slug}${AUDIT_LOG_EMAIL_DOMAIN}` };
+
+  for (const user of [owner, admin, member]) {
+    await prisma.user.upsert({
+      where: { id: user.id },
+      create: {
+        id: user.id,
+        name: user.email.split('@')[0] ?? user.id,
+        email: user.email,
+        emailVerified: true,
+      },
+      update: {
+        email: user.email,
+        emailVerified: true,
+      },
+    });
+  }
+
+  const memberships = [
+    { id: `test-audit-log-member-owner-${slug}`, userId: owner.id, role: 'owner' },
+    { id: `test-audit-log-member-admin-${slug}`, userId: admin.id, role: 'admin' },
+    { id: `test-audit-log-member-agent-${slug}`, userId: member.id, role: 'member' },
+  ];
+
+  for (const membership of memberships) {
+    await prisma.member.upsert({
+      where: { id: membership.id },
+      create: {
+        id: membership.id,
+        organizationId,
+        userId: membership.userId,
+        role: membership.role,
+      },
+      update: {
+        role: membership.role,
+      },
+    });
+  }
+
+  return {
+    organizationId,
+    organizationSlug: slug,
+    owner,
+    admin,
+    member,
+  };
+}
+
+export async function seedAuditLogRows(
+  prisma: PrismaClient,
+  options: {
+    organizationId: string;
+    actorUserId: string;
+    rows: Array<{
+      action: string;
+      targetType: string;
+      targetId: string;
+      metadata?: Record<string, unknown>;
+      createdAt?: Date;
+    }>;
+  }
+): Promise<void> {
+  for (const row of options.rows) {
+    await prisma.auditLog.create({
+      data: {
+        organizationId: options.organizationId,
+        actorUserId: options.actorUserId,
+        action: row.action,
+        targetType: row.targetType,
+        targetId: row.targetId,
+        metadata: row.metadata,
+        createdAt: row.createdAt,
+      },
+    });
+  }
 }

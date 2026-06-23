@@ -16,7 +16,11 @@ import {
 import { FLOOR_FILTER_OPTIONS, matchesFloorFilter } from '@/lib/utils/floor-filters';
 import { formatElapsed, formatShiftStarted } from '@/lib/utils/format-time';
 import { cn } from '@/lib/utils';
-import { ComplianceAlert, FloorAgentRow, FloorStatusFilter } from '@/types/admin-dashboard';
+import {
+  ComplianceAlert,
+  FloorAgentRow,
+  FloorStatusFilter,
+} from '@/types/admin-dashboard';
 
 function StatusElapsed({ since, isRunning }: { since: string; isRunning: boolean }) {
   const [elapsed, setElapsed] = useState(() => formatElapsed(since));
@@ -40,7 +44,23 @@ function StatusElapsed({ since, isRunning }: { since: string; isRunning: boolean
   );
 }
 
-function agentRowClass(agent: FloorAgentRow): string | undefined {
+function complianceRowClass(severity: ComplianceAlert['severity'] | undefined): string | undefined {
+  if (severity === 'critical') {
+    return 'border-l-4 border-l-destructive bg-destructive/5 hover:bg-destructive/10';
+  }
+  if (severity === 'warning') {
+    return 'border-l-4 border-l-amber-500 bg-amber-500/5 hover:bg-amber-500/10';
+  }
+  return undefined;
+}
+
+function agentRowClass(
+  agent: FloorAgentRow,
+  complianceSeverity: ComplianceAlert['severity'] | undefined
+): string | undefined {
+  const complianceClass = complianceRowClass(complianceSeverity);
+  if (complianceClass) return complianceClass;
+
   if (!agent.isOnShift) return 'opacity-60';
   if (agent.isProductive === false) return 'bg-background hover:bg-background/80';
   if (agent.displayStatus === 'Available') return 'bg-brand-accent/5 hover:bg-brand-accent/10';
@@ -62,12 +82,14 @@ function statusBadgeProps(agent: FloorAgentRow): {
 
 export function LiveFloorTable({
   agents,
+  complianceSeverityByUserId,
   filter,
   onFilterChange,
   isLoading,
   onSelectAgent,
 }: {
   agents: FloorAgentRow[];
+  complianceSeverityByUserId: Map<string, ComplianceAlert['severity']>;
   filter: FloorStatusFilter;
   onFilterChange: (filter: FloorStatusFilter) => void;
   isLoading: boolean;
@@ -118,9 +140,31 @@ export function LiveFloorTable({
               </TableHead>
               <TableBody>
                 {filteredAgents.length > 0 ? (
-                  filteredAgents.map((agent) => (
-                    <TableRow key={agent.userId} className={agentRowClass(agent)}>
-                      <TableCell className="font-medium">{agent.employeeName}</TableCell>
+                  filteredAgents.map((agent) => {
+                    const complianceSeverity = complianceSeverityByUserId.get(agent.userId);
+
+                    return (
+                    <TableRow
+                      key={agent.userId}
+                      className={agentRowClass(agent, complianceSeverity)}
+                    >
+                      <TableCell className="font-medium">
+                        <div className="flex items-center gap-2">
+                          <span>{agent.employeeName}</span>
+                          {complianceSeverity && (
+                            <span
+                              className={cn(
+                                'rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide',
+                                complianceSeverity === 'critical'
+                                  ? 'bg-destructive/15 text-destructive'
+                                  : 'bg-amber-500/15 text-amber-700 dark:text-amber-400'
+                              )}
+                            >
+                              {complianceSeverity}
+                            </span>
+                          )}
+                        </div>
+                      </TableCell>
                       <TableCell>
                         <StatusBadge {...statusBadgeProps(agent)} />
                       </TableCell>
@@ -148,7 +192,8 @@ export function LiveFloorTable({
                         </button>
                       </TableCell>
                     </TableRow>
-                  ))
+                    );
+                  })
                 ) : (
                   <TableEmptyState message="No agents match this filter." />
                 )}

@@ -1,4 +1,10 @@
-import { fail, fromServiceResult } from '@/lib/http/api-handler';
+import {
+  fail,
+  fromServiceResult,
+  outcomeFromServiceResult,
+} from '@/lib/http/api-handler';
+import { runWithApiRequestLogging } from '@/lib/http/request-log';
+import { applySentryTenantTags } from '@/lib/monitoring/sentry-tenant';
 import { TimeTrackingErrorCodes } from '@/lib/errors/time-tracking';
 import {
   resolveAdminSessionContext,
@@ -11,26 +17,53 @@ export async function executeAuthenticatedRoute<T>(
   request: Request,
   handler: (ctx: { userId: string; organizationId: string }) => Promise<ServiceResult<T>>
 ) {
-  const contextResult = await resolveSessionContext(request);
-  if (!contextResult.success) {
-    return fromServiceResult(contextResult);
-  }
+  return runWithApiRequestLogging(request, async () => {
+    const contextResult = await resolveSessionContext(request);
+    if (!contextResult.success) {
+      return {
+        response: fromServiceResult(contextResult),
+        outcome: outcomeFromServiceResult(contextResult),
+      };
+    }
 
-  const result = await handler(contextResult.data);
-  return fromServiceResult(result);
+    const { userId, organizationId, memberRole } = contextResult.data;
+    applySentryTenantTags({ organizationId });
+    const result = await handler({ userId, organizationId });
+
+    return {
+      response: fromServiceResult(result),
+      outcome: outcomeFromServiceResult(result),
+      tenant: { userId, organizationId, memberRole },
+    };
+  });
 }
 
 export async function executeAdminRoute<T>(
   request: Request,
   handler: (ctx: SessionContext) => Promise<ServiceResult<T>>
 ) {
-  const contextResult = await resolveAdminSessionContext(request);
-  if (!contextResult.success) {
-    return fromServiceResult(contextResult);
-  }
+  return runWithApiRequestLogging(request, async () => {
+    const contextResult = await resolveAdminSessionContext(request);
+    if (!contextResult.success) {
+      return {
+        response: fromServiceResult(contextResult),
+        outcome: outcomeFromServiceResult(contextResult),
+      };
+    }
 
-  const result = await handler(contextResult.data);
-  return fromServiceResult(result);
+    applySentryTenantTags({ organizationId: contextResult.data.organizationId });
+    const result = await handler(contextResult.data);
+
+    return {
+      response: fromServiceResult(result),
+      outcome: outcomeFromServiceResult(result),
+      tenant: {
+        userId: contextResult.data.userId,
+        organizationId: contextResult.data.organizationId,
+        memberRole: contextResult.data.memberRole,
+      },
+    };
+  });
 }
 
 export async function parseJsonBody(request: Request): Promise<unknown | null> {

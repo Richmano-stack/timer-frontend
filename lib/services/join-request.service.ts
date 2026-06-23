@@ -1,4 +1,5 @@
 import { Prisma } from '@prisma/client';
+import { auditJoinRequestDenied } from '@/lib/db/audit';
 import { prisma } from '@/lib/db/prisma';
 import { JoinErrorCodes } from '@/lib/errors/join';
 import { fail as joinFail } from '@/lib/errors/join-service';
@@ -25,6 +26,21 @@ export interface ApproveJoinRequestResult {
   joinRequestId: string;
   organizationId: string;
   memberId: string | null;
+  email: string;
+}
+
+export type JoinRequestListStatus = 'PENDING' | 'APPROVED' | 'DENIED';
+
+export interface JoinRequestListItem {
+  id: string;
+  email: string;
+  status: JoinRequestListStatus;
+  createdAt: string;
+  reviewedAt: string | null;
+}
+
+export interface DenyJoinRequestResult {
+  joinRequestId: string;
   email: string;
 }
 
@@ -368,4 +384,96 @@ export async function approveJoinRequest(
     }
     throw error;
   }
+}
+
+export async function listJoinRequestsForAdmin(
+  organizationId: string,
+  status: JoinRequestListStatus
+): Promise<ServiceResult<JoinRequestListItem[]>> {
+  const joinRequests = await prisma.joinRequest.findMany({
+    where: {
+      organizationId,
+      status,
+    },
+    orderBy: { createdAt: 'desc' },
+    select: {
+      id: true,
+      email: true,
+      status: true,
+      createdAt: true,
+      reviewedAt: true,
+    },
+  });
+
+  return {
+    success: true,
+    data: joinRequests.map((request) => ({
+      id: request.id,
+      email: request.email,
+      status: request.status,
+      createdAt: request.createdAt.toISOString(),
+      reviewedAt: request.reviewedAt?.toISOString() ?? null,
+    })),
+  };
+}
+
+export async function denyJoinRequest(
+  joinRequestId: string,
+  organizationId: string,
+  reviewerId: string
+): Promise<ServiceResult<DenyJoinRequestResult>> {
+  const joinRequest = await prisma.joinRequest.findFirst({
+    where: { id: joinRequestId, organizationId },
+    select: {
+      id: true,
+      email: true,
+      status: true,
+    },
+  });
+
+  if (!joinRequest) {
+    return joinFail(JoinErrorCodes.JOIN_REQUEST_NOT_FOUND, 'Join request not found.');
+  }
+
+  if (joinRequest.status !== 'PENDING') {
+    return joinFail(
+      JoinErrorCodes.JOIN_REQUEST_NOT_PENDING,
+      'This join request is no longer pending approval.'
+    );
+  }
+
+  const updated = await prisma.joinRequest.updateMany({
+    where: {
+      id: joinRequestId,
+      organizationId,
+      status: 'PENDING',
+    },
+    data: {
+      status: 'DENIED',
+      reviewedAt: new Date(),
+      reviewedBy: reviewerId,
+    },
+  });
+
+  if (updated.count === 0) {
+    return joinFail(
+      JoinErrorCodes.JOIN_REQUEST_NOT_PENDING,
+      'This join request is no longer pending approval.'
+    );
+  }
+
+  void auditJoinRequestDenied({
+    organizationId,
+    actorUserId: reviewerId,
+    joinRequestId,
+    metadata: { email: joinRequest.email },
+  });
+
+  return {
+    success: true,
+    data: {
+      joinRequestId,
+      email: joinRequest.email,
+    },
+  };
 }

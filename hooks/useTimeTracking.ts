@@ -102,38 +102,52 @@ export function useTimeTracking() {
     setErrorCode(null);
   }, []);
 
+  const idempotencyHeaders = useCallback((): Record<string, string> => {
+    return { 'Idempotency-Key': crypto.randomUUID() };
+  }, []);
+
   const clockIn = useCallback(
     async (options: ClockInOptions = {}) => {
       return runAction(async () => {
-        await api.post<TimeLogResponse>('/api/time/clock-in', {
-          notes: options.notes,
-        });
+        await api.post<TimeLogResponse>(
+          '/api/time/clock-in',
+          { notes: options.notes },
+          { headers: idempotencyHeaders() }
+        );
       });
     },
-    [runAction]
+    [runAction, idempotencyHeaders]
   );
 
   const clockOut = useCallback(async () => {
     return runAction(async () => {
-      await api.post<TimeLogResponse>('/api/time/clock-out');
+      await api.post<TimeLogResponse>('/api/time/clock-out', undefined, {
+        headers: idempotencyHeaders(),
+      });
     });
-  }, [runAction]);
+  }, [runAction, idempotencyHeaders]);
 
   const setAvailable = useCallback(async () => {
     return runAction(async () => {
-      await api.post<SetStatusResponse>('/api/time/status', {});
+      await api.post<SetStatusResponse>(
+        '/api/time/status',
+        {},
+        { headers: idempotencyHeaders() }
+      );
     });
-  }, [runAction]);
+  }, [runAction, idempotencyHeaders]);
 
   const setStatus = useCallback(
     async (status: Pick<ActivityStatusOption, 'id' | 'name'>) => {
       return runAction(async () => {
-        await api.post<SetStatusResponse>('/api/time/status', {
-          statusId: status.id,
-        });
+        await api.post<SetStatusResponse>(
+          '/api/time/status',
+          { statusId: status.id },
+          { headers: idempotencyHeaders() }
+        );
       });
     },
-    [runAction]
+    [runAction, idempotencyHeaders]
   );
 
   return {

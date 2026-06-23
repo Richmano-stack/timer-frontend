@@ -10,7 +10,7 @@ import { prisma } from '@/lib/db/prisma';
  * | invitation.sent             | invitation.service createInvitationForAdmin        | invitation    |
  * | invitation.accepted         | join.service invitation redeem                   | invitation    |
  * | join_request.approved       | join-request.service approveJoinRequest          | join_request  |
- * | join_request.denied         | join-request.service denyJoinRequest (when added)  | join_request  |
+ * | join_request.denied         | join-request.service denyJoinRequest               | join_request  |
  * | member.role_changed         | organization-team.service updateMemberRoleForAdmin | member        |
  * | domain_whitelist.updated    | join.service updateJoinSettings                    | organization  |
  */
