@@ -4,9 +4,9 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
-    "predev": "prisma generate",
+    "predev": "node scripts/prisma-generate-safe.mjs",
     "build": "next build",
-    "prebuild": "prisma generate",
+    "prebuild": "node scripts/prisma-generate-safe.mjs",
     "start": "next start",
     "lint": "eslint",
     "test": "vitest",
