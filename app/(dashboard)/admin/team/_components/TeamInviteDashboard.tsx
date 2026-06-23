@@ -35,6 +35,7 @@ import {
 } from '@/components/ui/Table';
 import { Toast, ToastStack } from '@/components/ui/Toast';
 import { api, ApiError } from '@/lib/api';
+import { authClient } from '@/lib/auth-client';
 import { normalizeDomain } from '@/lib/organization/metadata';
 import {
   assignableRolesForActor,
@@ -45,6 +46,7 @@ import {
   ROLE_LABELS,
 } from '@/lib/organization/roles';
 import { InviteDiscoveryPanel, InviteModal } from './InviteModal';
+import { MemberRowActions, MemberStatusBadge, type MemberStatus } from './MemberRowActions';
 import { parseCsvInvites } from './parse-csv-invites';
 import { organizationKeys, SEAT_LIMIT_PLACEHOLDER } from './query-keys';
 import { RequestsTable } from './RequestsTable';
@@ -58,6 +60,7 @@ interface OrgUser {
 interface OrgMember {
   id: string;
   role: string;
+  status: MemberStatus;
   createdAt: string;
   user: OrgUser;
 }
@@ -208,6 +211,8 @@ function SeatIndicator({
 export function TeamInviteDashboard() {
   const queryClient = useQueryClient();
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const { data: session } = authClient.useSession();
+  const actorUserId = session?.user?.id ?? null;
 
   const [toast, setToast] = useState<ToastState | null>(null);
   const [inviteModalOpen, setInviteModalOpen] = useState(false);
@@ -306,6 +311,11 @@ export function TeamInviteDashboard() {
   const organization = teamQuery.data ?? null;
   const invitations = invitationsQuery.data ?? [];
   const joinSettings = joinSettingsQuery.data ?? null;
+
+  const activeOwnerCount =
+    organization?.members.filter(
+      (member) => primaryRole(member.role) === 'owner' && member.status === 'ACTIVE'
+    ).length ?? 0;
 
   const displayedDomains = domainsDirty
     ? allowedDomains
@@ -633,7 +643,7 @@ export function TeamInviteDashboard() {
                 <CardTitle className="text-base text-muted-foreground">Team members</CardTitle>
                 <CardDescription>
                   {organization?.members.length ?? 0} in organization · owners and admins can
-                  change agent/admin roles
+                  change roles and suspend members
                 </CardDescription>
               </CardHeader>
               <CardContent className="px-0 pb-0">
@@ -646,7 +656,9 @@ export function TeamInviteDashboard() {
                         <TableHeaderCell>Name</TableHeaderCell>
                         <TableHeaderCell>Email</TableHeaderCell>
                         <TableHeaderCell>Role</TableHeaderCell>
+                        <TableHeaderCell>Status</TableHeaderCell>
                         <TableHeaderCell>Joined</TableHeaderCell>
+                        <TableHeaderCell className="w-32">Actions</TableHeaderCell>
                       </TableHead>
                       <TableBody>
                         {organization && organization.members.length > 0 ? (
@@ -674,8 +686,28 @@ export function TeamInviteDashboard() {
                                   </Badge>
                                 )}
                               </TableCell>
+                              <TableCell>
+                                <MemberStatusBadge status={member.status} />
+                              </TableCell>
                               <TableCell className="font-mono text-xs tabular-nums">
                                 {formatDateTime(member.createdAt)}
+                              </TableCell>
+                              <TableCell>
+                                {actorRole ? (
+                                  <MemberRowActions
+                                    memberId={member.id}
+                                    memberName={member.user.name}
+                                    memberRole={member.role}
+                                    memberStatus={member.status}
+                                    memberUserId={member.user.id}
+                                    actorRole={actorRole}
+                                    actorUserId={actorUserId}
+                                    activeOwnerCount={activeOwnerCount}
+                                    onToast={setToast}
+                                  />
+                                ) : (
+                                  <span className="text-xs text-muted-foreground">—</span>
+                                )}
                               </TableCell>
                             </TableRow>
                           ))

@@ -43,6 +43,9 @@ interface OrganizationSettings {
   timezone: string | null;
   allowedDomains: string[];
   requireApproval: boolean;
+  maxShiftHours: number;
+  maxBreakMinutes: number;
+  maxLunchMinutes: number;
 }
 
 interface JoinSettingsPatchResponse {
@@ -112,6 +115,10 @@ export function OrganizationSettingsDashboard() {
   const [allowedDomains, setAllowedDomains] = useState<string[]>([]);
   const [domainError, setDomainError] = useState<string | null>(null);
   const [domainsDirty, setDomainsDirty] = useState(false);
+  const [maxShiftHoursInput, setMaxShiftHoursInput] = useState('12');
+  const [maxBreakMinutesInput, setMaxBreakMinutesInput] = useState('30');
+  const [maxLunchMinutesInput, setMaxLunchMinutesInput] = useState('30');
+  const [complianceDirty, setComplianceDirty] = useState(false);
 
   const settingsQuery = useQuery({
     queryKey: organizationKeys.settings(),
@@ -207,9 +214,41 @@ export function OrganizationSettingsDashboard() {
     },
   });
 
+  const complianceMutation = useMutation({
+    mutationFn: (payload: {
+      maxShiftHours: number;
+      maxBreakMinutes: number;
+      maxLunchMinutes: number;
+    }) => api.patch<OrganizationSettings>('/api/organization/settings', payload),
+    onSuccess: (updated) => {
+      setMaxShiftHoursInput(String(updated.maxShiftHours));
+      setMaxBreakMinutesInput(String(updated.maxBreakMinutes));
+      setMaxLunchMinutesInput(String(updated.maxLunchMinutes));
+      setComplianceDirty(false);
+      setToast({ message: 'Compliance limits updated.', variant: 'success' });
+      invalidateSettings();
+    },
+    onError: (err) => {
+      setToast({
+        message: err instanceof ApiError ? err.message : 'Failed to update compliance limits.',
+        variant: 'error',
+      });
+    },
+  });
+
   const displayedDomains = domainsDirty
     ? allowedDomains
     : (settings?.allowedDomains ?? allowedDomains);
+
+  const maxShiftHoursValue = complianceDirty
+    ? maxShiftHoursInput
+    : String(settings?.maxShiftHours ?? 12);
+  const maxBreakMinutesValue = complianceDirty
+    ? maxBreakMinutesInput
+    : String(settings?.maxBreakMinutes ?? 30);
+  const maxLunchMinutesValue = complianceDirty
+    ? maxLunchMinutesInput
+    : String(settings?.maxLunchMinutes ?? 30);
 
   const handleSaveName = (event: FormEvent) => {
     event.preventDefault();
@@ -259,6 +298,34 @@ export function OrganizationSettingsDashboard() {
       return;
     }
     domainsMutation.mutate(displayedDomains);
+  };
+
+  const handleSaveCompliance = (event: FormEvent) => {
+    event.preventDefault();
+
+    const maxShiftHours = Number(maxShiftHoursValue);
+    const maxBreakMinutes = Number(maxBreakMinutesValue);
+    const maxLunchMinutes = Number(maxLunchMinutesValue);
+
+    if (
+      !Number.isFinite(maxShiftHours) ||
+      maxShiftHours <= 0 ||
+      maxShiftHours > 24 ||
+      !Number.isFinite(maxBreakMinutes) ||
+      maxBreakMinutes <= 0 ||
+      maxBreakMinutes > 480 ||
+      !Number.isFinite(maxLunchMinutes) ||
+      maxLunchMinutes <= 0 ||
+      maxLunchMinutes > 480
+    ) {
+      setToast({
+        message: 'Enter valid compliance limits (shift ≤ 24h, breaks ≤ 480m).',
+        variant: 'error',
+      });
+      return;
+    }
+
+    complianceMutation.mutate({ maxShiftHours, maxBreakMinutes, maxLunchMinutes });
   };
 
   const loadError = settingsQuery.error;
@@ -431,6 +498,77 @@ export function OrganizationSettingsDashboard() {
                       {domainsMutation.isPending ? 'Saving…' : 'Save domains'}
                     </Button>
                   </div>
+                </CardContent>
+              </Card>
+
+              <Card>
+                <CardHeader>
+                  <CardTitle>Compliance limits</CardTitle>
+                  <CardDescription>
+                    Thresholds for floor-monitor alerts and automated end-of-shift clock-out
+                  </CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <form onSubmit={handleSaveCompliance} className="flex flex-col gap-4">
+                    <div className="grid gap-4 sm:grid-cols-3">
+                      <div className="space-y-2">
+                        <Label htmlFor="max-shift-hours">Max shift (hours)</Label>
+                        <Input
+                          id="max-shift-hours"
+                          type="number"
+                          min={1}
+                          max={24}
+                          step={0.5}
+                          value={maxShiftHoursValue}
+                          onChange={(event) => {
+                            setMaxShiftHoursInput(event.target.value);
+                            setComplianceDirty(true);
+                          }}
+                          disabled={complianceMutation.isPending}
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <Label htmlFor="max-break-minutes">Max break (minutes)</Label>
+                        <Input
+                          id="max-break-minutes"
+                          type="number"
+                          min={1}
+                          max={480}
+                          step={1}
+                          value={maxBreakMinutesValue}
+                          onChange={(event) => {
+                            setMaxBreakMinutesInput(event.target.value);
+                            setComplianceDirty(true);
+                          }}
+                          disabled={complianceMutation.isPending}
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <Label htmlFor="max-lunch-minutes">Max lunch (minutes)</Label>
+                        <Input
+                          id="max-lunch-minutes"
+                          type="number"
+                          min={1}
+                          max={480}
+                          step={1}
+                          value={maxLunchMinutesValue}
+                          onChange={(event) => {
+                            setMaxLunchMinutesInput(event.target.value);
+                            setComplianceDirty(true);
+                          }}
+                          disabled={complianceMutation.isPending}
+                        />
+                      </div>
+                    </div>
+                    <div className="flex justify-end">
+                      <Button
+                        type="submit"
+                        disabled={!complianceDirty || complianceMutation.isPending}
+                      >
+                        {complianceMutation.isPending ? 'Saving…' : 'Save compliance limits'}
+                      </Button>
+                    </div>
+                  </form>
                 </CardContent>
               </Card>
 

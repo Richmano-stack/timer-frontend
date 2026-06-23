@@ -262,6 +262,9 @@ export async function resetTenantIsolationTestData(prisma: PrismaClient): Promis
   await prisma.idempotencyKey.deleteMany({
     where: { organization: { slug: { startsWith: ISOLATION_SLUG_PREFIX } } },
   });
+  await prisma.timeLogAudit.deleteMany({
+    where: { organization: { slug: { startsWith: ISOLATION_SLUG_PREFIX } } },
+  });
   await prisma.timeLog.deleteMany({
     where: { organization: { slug: { startsWith: ISOLATION_SLUG_PREFIX } } },
   });

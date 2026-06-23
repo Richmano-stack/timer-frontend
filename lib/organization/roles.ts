@@ -48,3 +48,14 @@ export function canEditMemberRole(actorRole: string, targetRole: string): boolea
 
   return true;
 }
+
+/** Status changes allow owners to suspend other owners; admins may only suspend members. */
+export function canEditMemberStatus(actorRole: string, targetRole: string): boolean {
+  const actor = primaryRole(actorRole);
+  const target = primaryRole(targetRole);
+
+  if (actor !== 'owner' && actor !== 'admin') return false;
+  if (actor === 'admin' && target !== 'member') return false;
+
+  return true;
+}

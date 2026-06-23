@@ -17,10 +17,12 @@ const {
   mockTransaction,
   mockUserFindFirst,
   mockActivityStatusFindMany,
+  mockOrganizationFindUnique,
   mockResolveOrganizationContext,
   mockResolveAvailableStatus,
   mockResolveActivityStatus,
   mockUtcNow,
+  mockCheckMemberActive,
 } = vi.hoisted(() => ({
   mockFindFirst: vi.fn(),
   mockFindMany: vi.fn(),
@@ -30,10 +32,12 @@ const {
   mockTransaction: vi.fn(),
   mockUserFindFirst: vi.fn(),
   mockActivityStatusFindMany: vi.fn(),
+  mockOrganizationFindUnique: vi.fn(),
   mockResolveOrganizationContext: vi.fn(),
   mockResolveAvailableStatus: vi.fn(),
   mockResolveActivityStatus: vi.fn(),
   mockUtcNow: vi.fn(),
+  mockCheckMemberActive: vi.fn(),
 }));
 
 vi.mock('@/lib/db/prisma', () => ({
@@ -51,8 +55,15 @@ vi.mock('@/lib/db/prisma', () => ({
     activityStatus: {
       findMany: mockActivityStatusFindMany,
     },
+    organization: {
+      findUnique: mockOrganizationFindUnique,
+    },
     $transaction: mockTransaction,
   },
+}));
+
+vi.mock('@/lib/services/organization-team.service', () => ({
+  checkMemberActive: mockCheckMemberActive,
 }));
 
 vi.mock('@/lib/security/organization-context', async (importOriginal) => {
@@ -101,6 +112,13 @@ const lunchStatus = {
   isProductive: false,
 };
 
+function memberActiveSuccess() {
+  mockCheckMemberActive.mockResolvedValue({
+    success: true,
+    data: { userId: USER_ID, organizationId: ORG_ID },
+  });
+}
+
 function tenantSuccess() {
   mockResolveOrganizationContext.mockResolvedValue({
     success: true,
@@ -143,6 +161,8 @@ function mockClockOutTransaction() {
 beforeEach(() => {
   vi.clearAllMocks();
   mockUtcNow.mockReturnValue(new Date('2026-06-10T12:00:00.000Z'));
+  mockOrganizationFindUnique.mockResolvedValue({ timezone: 'UTC' });
+  memberActiveSuccess();
   tenantSuccess();
 });
 
@@ -577,6 +597,27 @@ describe('getMyDayService', () => {
       expect(result.data.activeSession?.activeSegment?.id).toBe('open-seg');
       expect(result.data.shifts[0]?.status).toBe('active');
     }
+  });
+
+  it('queries day boundaries using the organization timezone', async () => {
+    mockOrganizationFindUnique.mockResolvedValue({ timezone: 'America/New_York' });
+    mockUserFindFirst.mockResolvedValue({ name: 'Agent One' });
+    mockActivityStatusFindMany.mockResolvedValue([]);
+    mockFindMany.mockResolvedValue([]);
+    mockFindFirst.mockResolvedValue(null);
+
+    await getMyDayService(USER_ID, ORG_ID, '2026-06-10');
+
+    expect(mockFindMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({
+          startTime: {
+            gte: new Date('2026-06-10T04:00:00.000Z'),
+            lte: new Date('2026-06-11T03:59:59.999Z'),
+          },
+        }),
+      })
+    );
   });
 
   it('fails when target userId is not a member of organizationId', async () => {

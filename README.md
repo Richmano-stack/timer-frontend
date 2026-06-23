@@ -2,17 +2,34 @@
 
 **OmniShift** is a full-stack **Next.js** app for call-center time tracking: employees clock in and switch activity statuses; admins monitor the floor, export timesheets, and manage team join settings.
 
-**Documentation:** [ARCHITECTURE.md](./ARCHITECTURE.md) (system map) · [API_REFERENCE.md](./API_REFERENCE.md) (endpoints)
+**Documentation:** [ARCHITECTURE.md](./ARCHITECTURE.md) (system map) · [API_REFERENCE.md](./API_REFERENCE.md) (endpoints) · [ROADMAP.md](./ROADMAP.md) (phases & tickets)
+
+**Status:** Phase 1 (tenant foundation & access control) and **Phase 2** (owner workspace & operational reliability) are implemented in code. **Phase 3** (monetization, scale & advanced operations) is next — see [ROADMAP.md](./ROADMAP.md#phase-3--monetization-scale--advanced-operations).
 
 ---
 
 ## Features
 
-- **Employee time card** — clock in/out, status changes, daily summary
-- **Admin floor monitor** — live KPIs, agent table, compliance alerts
-- **Reports** — date-range timesheets with CSV export
-- **Team join** — email invitations, allowed domains, pending invite management
+### Employee
+
+- **Time card** (`/employee/track`) — clock in/out, activity status changes, daily summary
+- **Offline resilience** — offline banner, queued actions with idempotency keys, auto-sync on reconnect
+- **Presence heartbeat** — periodic `POST /api/time/heartbeat` while the time card is open
+
+### Admin
+
+- **Floor monitor** (`/admin/overview`) — live KPIs, agent table, SSE stream with polling fallback, compliance alerts
+- **Reports** (`/admin/reports`) — timezone-aware date range, agent filter, CSV export, timesheet corrections with audit trail
+- **Team** (`/admin/team`) — invitations, join requests, member suspend/reactivate, domain whitelist
+- **Settings** (`/admin/settings`) — org name, timezone, join policy, compliance limits (shift/break/lunch), audit log viewer, activity status customizer
+- **Data export** — `GET /api/admin/export` (ZIP: members, time logs, audit logs)
+
+### Platform
+
+- **Team join** — email invitations, allowed domains, optional join-request queue, token-gated onboarding
 - **Auth** — Better Auth (email/password, Google OAuth, magic link, organizations)
+- **Observability** — structured API request logs, Sentry multi-tenant tags, `GET /api/health`
+- **Security** — production CSP / security headers, cross-tenant isolation tests, append-only audit logs
 
 ---
 
@@ -122,12 +139,24 @@ CI (`.github/workflows/ci.yml`) runs `pnpm lint` and `pnpm test:run` (unit) on e
 
 ### Scheduled auto clock-out (cron)
 
-`POST` or `GET` `/api/cron/auto-clock-out` closes open shifts that exceed the org threshold (default **12 hours**; override via `Organization.metadata.maxShiftHours`). Authenticate with `x-cron-secret` or `Authorization: Bearer <CRON_SECRET>`.
+`POST` or `GET` `/api/cron/auto-clock-out` closes open shifts that exceed the org **max shift hours** threshold (configurable under **Admin → Settings → Compliance**; defaults: 12h shift, 30min break/lunch). Authenticate with `x-cron-secret` or `Authorization: Bearer <CRON_SECRET>`.
 
 ```bash
 curl -X POST http://localhost:3000/api/cron/auto-clock-out \
   -H "x-cron-secret: $CRON_SECRET"
 ```
+
+---
+
+## Roadmap
+
+| Phase | Focus | Status |
+|-------|--------|--------|
+| **1** | Tenant foundation & access control | Complete |
+| **2** | Owner workspace & operational reliability | Complete |
+| **3** | Monetization, scale & advanced operations | Next ([TKT-301+](./ROADMAP.md#phase-3--monetization-scale--advanced-operations)) |
+
+Ticket-level detail and parallel execution notes: [ROADMAP.md](./ROADMAP.md) · [ROADMAP_EXECUTION.md](./ROADMAP_EXECUTION.md).
 
 ---
 

@@ -52,6 +52,7 @@ export interface TimesheetRow {
   clockOutFormatted: string;
   breakDeductions: string;
   netWorkHours: string;
+  manuallyEdited: boolean;
 }
 
 export interface TimesheetsResponse {
