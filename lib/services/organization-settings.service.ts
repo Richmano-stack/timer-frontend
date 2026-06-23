@@ -8,6 +8,7 @@ import {
   serializeOrganizationMetadata,
   type OrganizationJoinMetadata,
 } from '@/lib/organization/metadata';
+import { resolveComplianceLimitsFromMetadata } from '@/lib/organization/compliance-limits';
 import { ServiceResult } from '@/lib/types/api-response';
 
 export interface OrganizationSettings {
@@ -17,6 +18,9 @@ export interface OrganizationSettings {
   timezone: string;
   allowedDomains: string[];
   requireApproval: boolean;
+  maxShiftHours: number;
+  maxBreakMinutes: number;
+  maxLunchMinutes: number;
 }
 
 function resolveOrganizationMetadata(raw: string | null | undefined): OrganizationJoinMetadata {
@@ -36,6 +40,7 @@ export async function getOrganizationSettingsForAdmin(
   }
 
   const metadata = resolveOrganizationMetadata(organization.metadata);
+  const complianceLimits = resolveComplianceLimitsFromMetadata(metadata);
 
   return {
     success: true,
@@ -46,13 +51,22 @@ export async function getOrganizationSettingsForAdmin(
       timezone: organization.timezone,
       allowedDomains: metadata.allowedDomains,
       requireApproval: joinPolicyToRequireApproval(organization.joinPolicy),
+      maxShiftHours: complianceLimits.maxShiftHours,
+      maxBreakMinutes: complianceLimits.maxBreakMinutes,
+      maxLunchMinutes: complianceLimits.maxLunchMinutes,
     },
   };
 }
 
 export async function updateOrganizationSettings(
   organizationId: string,
-  updates: { name?: string; timezone?: string }
+  updates: {
+    name?: string;
+    timezone?: string;
+    maxShiftHours?: number;
+    maxBreakMinutes?: number;
+    maxLunchMinutes?: number;
+  }
 ): Promise<ServiceResult<OrganizationSettings>> {
   const organization = await prisma.organization.findUnique({
     where: { id: organizationId },
@@ -77,6 +91,28 @@ export async function updateOrganizationSettings(
     };
     data.metadata = serializeOrganizationMetadata(nextMetadata);
     data.timezone = updates.timezone;
+    currentMetadata.timezone = updates.timezone;
+  }
+
+  const complianceUpdates: Partial<
+    Pick<OrganizationJoinMetadata, 'maxShiftHours' | 'maxBreakMinutes' | 'maxLunchMinutes'>
+  > = {};
+
+  if (updates.maxShiftHours !== undefined) {
+    complianceUpdates.maxShiftHours = updates.maxShiftHours;
+  }
+  if (updates.maxBreakMinutes !== undefined) {
+    complianceUpdates.maxBreakMinutes = updates.maxBreakMinutes;
+  }
+  if (updates.maxLunchMinutes !== undefined) {
+    complianceUpdates.maxLunchMinutes = updates.maxLunchMinutes;
+  }
+
+  if (Object.keys(complianceUpdates).length > 0) {
+    data.metadata = serializeOrganizationMetadata({
+      ...currentMetadata,
+      ...complianceUpdates,
+    });
   }
 
   await prisma.organization.update({

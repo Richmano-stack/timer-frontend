@@ -27,6 +27,24 @@ export function formatDateLocal(iso: string): string {
   });
 }
 
+export function formatDateInTimezone(iso: string, timeZone: string): string {
+  return new Date(iso).toLocaleDateString(undefined, {
+    timeZone,
+    year: 'numeric',
+    month: 'short',
+    day: 'numeric',
+  });
+}
+
+export function formatTimeInTimezone(iso: string, timeZone: string): string {
+  return new Date(iso).toLocaleTimeString(undefined, {
+    timeZone,
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: true,
+  });
+}
+
 export function toCsvValue(value: string): string {
   if (value.includes(',') || value.includes('"') || value.includes('\n')) {
     return `"${value.replace(/"/g, '""')}"`;
@@ -42,9 +60,18 @@ export function buildTimesheetsCsv(
     clockOut: string;
     breakDeductions: string;
     netWorkHours: string;
+    manuallyEdited?: boolean;
   }[]
 ): string {
-  const header = ['Date', 'Employee Name', 'Clock In', 'Clock Out', 'Break Deductions', 'Net Work Hours'];
+  const header = [
+    'Date',
+    'Employee Name',
+    'Clock In',
+    'Clock Out',
+    'Break Deductions',
+    'Net Work Hours',
+    'Manually Edited',
+  ];
   const lines = [
     header.join(','),
     ...rows.map((row) =>
@@ -55,6 +82,7 @@ export function buildTimesheetsCsv(
         toCsvValue(row.clockOut),
         toCsvValue(row.breakDeductions),
         toCsvValue(row.netWorkHours),
+        row.manuallyEdited === true ? 'true' : 'false',
       ].join(',')
     ),
   ];

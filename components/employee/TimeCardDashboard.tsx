@@ -21,6 +21,23 @@ type ToastState = {
   variant: 'error' | 'success';
 };
 
+function OfflineBanner({ pendingCount }: { pendingCount: number }) {
+  return (
+    <div
+      role="status"
+      className="border-b border-amber-500/40 bg-amber-500/10 px-6 py-3"
+    >
+      <p className="text-sm font-semibold text-amber-950 dark:text-amber-100">
+        You&apos;re offline
+      </p>
+      <p className="mt-0.5 text-sm text-amber-900/80 dark:text-amber-100/80">
+        Changes are saved locally and will sync when you&apos;re back online.
+        {pendingCount > 0 ? ` ${pendingCount} action${pendingCount === 1 ? '' : 's'} queued.` : ''}
+      </p>
+    </div>
+  );
+}
+
 function ClockOutConfirmModal({
   open,
   onClose,
@@ -157,9 +174,14 @@ export function TimeCardDashboard() {
     session,
     isLoading,
     isSubmitting,
+    isOnline,
+    pendingCount,
     error,
     errorCode,
+    syncError,
+    syncErrorCode,
     clearError,
+    clearSyncError,
     clockIn,
     clockOut,
     setAvailable,
@@ -174,7 +196,10 @@ export function TimeCardDashboard() {
   const errorToast: ToastState | null = error
     ? { message: error, code: errorCode, variant: 'error' }
     : null;
-  const activeToast = toast ?? errorToast;
+  const syncErrorToast: ToastState | null = syncError
+    ? { message: syncError, code: syncErrorCode, variant: 'error' }
+    : null;
+  const activeToast = toast ?? syncErrorToast ?? errorToast;
 
   const showSuccess = useCallback((message: string) => {
     setToast({ message, variant: 'success' });
@@ -235,6 +260,7 @@ export function TimeCardDashboard() {
         />
       }
     >
+      {!isOnline && <OfflineBanner pendingCount={pendingCount} />}
       <StatusStrip session={session} isLoading={isLoading} date={date} />
       <TodayStatusLog
         timeline={myDay?.timeline}
@@ -259,6 +285,8 @@ export function TimeCardDashboard() {
             onDismiss={() => {
               if (toast) {
                 setToast(null);
+              } else if (syncError) {
+                clearSyncError();
               } else {
                 clearError();
               }

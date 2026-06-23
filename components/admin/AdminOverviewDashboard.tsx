@@ -117,11 +117,7 @@ export function AdminOverviewDashboard() {
       </header>
 
       <div className="shrink-0 border-b border-border bg-background px-6 py-4">
-        <FloorKpiStrip
-          kpis={overview?.kpis ?? null}
-          statusBreakdown={overview?.statusBreakdown ?? []}
-          isLoading={isLoading}
-        />
+        <FloorKpiStrip kpis={overview?.kpis ?? null} isLoading={isLoading} />
       </div>
 
       <div className="flex min-h-0 flex-1">

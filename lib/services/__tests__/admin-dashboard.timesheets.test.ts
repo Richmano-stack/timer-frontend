@@ -7,12 +7,14 @@ const {
   mockOrgFindUnique,
   mockTimeLogFindMany,
   mockTimeLogFindFirst,
+  mockTimeLogAuditFindMany,
   mockMemberFindMany,
   mockUtcNow,
 } = vi.hoisted(() => ({
   mockOrgFindUnique: vi.fn(),
   mockTimeLogFindMany: vi.fn(),
   mockTimeLogFindFirst: vi.fn(),
+  mockTimeLogAuditFindMany: vi.fn(),
   mockMemberFindMany: vi.fn(),
   mockUtcNow: vi.fn(),
 }));
@@ -25,6 +27,9 @@ vi.mock('@/lib/db/prisma', () => ({
     timeLog: {
       findMany: mockTimeLogFindMany,
       findFirst: mockTimeLogFindFirst,
+    },
+    timeLogAudit: {
+      findMany: mockTimeLogAuditFindMany,
     },
     member: {
       findMany: mockMemberFindMany,
@@ -77,7 +82,13 @@ function makeTimesheetSegment(
 beforeEach(() => {
   vi.clearAllMocks();
   mockUtcNow.mockReturnValue(FIXED_NOW);
-  mockOrgFindUnique.mockResolvedValue({ id: ORG_ID, name: 'Acme' });
+  mockOrgFindUnique.mockResolvedValue({
+    id: ORG_ID,
+    name: 'Acme',
+    timezone: 'UTC',
+    metadata: JSON.stringify({ allowedDomains: ['acme.com'] }),
+  });
+  mockTimeLogAuditFindMany.mockResolvedValue([]);
 });
 
 describe('getTimesheetsService', () => {
@@ -359,8 +370,8 @@ describe('getAdminOverviewService complianceAlerts', () => {
           user: { id: USER_ID, name: 'Agent One' },
         },
       ])
-      .mockResolvedValueOnce([]);
-    mockTimeLogFindFirst.mockResolvedValue({ startTime: longShiftStart });
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([{ userId: USER_ID, startTime: longShiftStart }]);
 
     const result = await getAdminOverviewService(ORG_ID);
 
@@ -392,8 +403,8 @@ describe('getAdminOverviewService complianceAlerts', () => {
           user: { id: USER_ID, name: 'Agent One' },
         },
       ])
-      .mockResolvedValueOnce([]);
-    mockTimeLogFindFirst.mockResolvedValue({ startTime: breakStart });
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([{ userId: USER_ID, startTime: breakStart }]);
 
     const result = await getAdminOverviewService(ORG_ID);
 
@@ -401,6 +412,78 @@ describe('getAdminOverviewService complianceAlerts', () => {
     if (result.success) {
       expect(result.data.complianceAlerts.some((alert) => alert.severity === 'warning')).toBe(true);
       expect(result.data.complianceAlerts[0]?.message).toContain('Extended lunch');
+    }
+  });
+
+  it('uses org-specific maxShiftHours from metadata', async () => {
+    mockOrgFindUnique.mockResolvedValue({
+      id: ORG_ID,
+      name: 'Acme',
+      timezone: 'UTC',
+      metadata: JSON.stringify({ allowedDomains: ['acme.com'], maxShiftHours: 8 }),
+    });
+
+    const shiftStart = new Date(FIXED_NOW.getTime() - 9 * 60 * 60 * 1000);
+    mockTimeLogFindMany
+      .mockResolvedValueOnce([
+        {
+          id: 'open-1',
+          userId: USER_ID,
+          organizationId: ORG_ID,
+          startTime: shiftStart,
+          endTime: null,
+          activityStatus: makeActivityStatus(),
+          user: { id: USER_ID, name: 'Agent One' },
+        },
+      ])
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([{ userId: USER_ID, startTime: shiftStart }]);
+
+    const result = await getAdminOverviewService(ORG_ID);
+
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.complianceAlerts.some((alert) => alert.severity === 'critical')).toBe(true);
+    }
+  });
+
+  it('applies separate lunch and break thresholds from metadata', async () => {
+    mockOrgFindUnique.mockResolvedValue({
+      id: ORG_ID,
+      name: 'Acme',
+      timezone: 'UTC',
+      metadata: JSON.stringify({
+        allowedDomains: ['acme.com'],
+        maxBreakMinutes: 10,
+        maxLunchMinutes: 60,
+      }),
+    });
+
+    const shortBreakStart = new Date(FIXED_NOW.getTime() - 20 * 60 * 1000);
+    mockTimeLogFindMany
+      .mockResolvedValueOnce([
+        {
+          id: 'open-short-break',
+          userId: USER_ID,
+          organizationId: ORG_ID,
+          startTime: shortBreakStart,
+          endTime: null,
+          activityStatus: makeActivityStatus({
+            name: 'Short Break',
+            type: StatusType.BREAK,
+          }),
+          user: { id: USER_ID, name: 'Agent One' },
+        },
+      ])
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([{ userId: USER_ID, startTime: shortBreakStart }]);
+
+    const result = await getAdminOverviewService(ORG_ID);
+
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.complianceAlerts.some((alert) => alert.severity === 'warning')).toBe(true);
+      expect(result.data.complianceAlerts[0]?.message).toContain('Extended short break');
     }
   });
 

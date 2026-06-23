@@ -4,11 +4,12 @@ export interface OrganizationJoinMetadata {
   requireApproval?: boolean;
   /** IANA timezone — mirrored in Organization.timezone column (TKT-201); kept in JSON during transition. */
   timezone?: string;
-  /**
-   * Max continuous open-shift hours before automated clock-out (TKT-207).
-   * Superseded by the TKT-206 compliance engine when available.
-   */
+  /** Max continuous open-shift hours before automated clock-out and compliance alerts. */
   maxShiftHours?: number;
+  /** Max duration in minutes for regular (non-lunch) break statuses. */
+  maxBreakMinutes?: number;
+  /** Max duration in minutes for lunch break statuses. */
+  maxLunchMinutes?: number;
 }
 
 export function parseOrganizationMetadata(
@@ -42,11 +43,27 @@ export function parseOrganizationMetadata(
         ? parsed.maxShiftHours
         : undefined;
 
+    const maxBreakMinutes =
+      typeof parsed.maxBreakMinutes === 'number' &&
+      Number.isFinite(parsed.maxBreakMinutes) &&
+      parsed.maxBreakMinutes > 0
+        ? parsed.maxBreakMinutes
+        : undefined;
+
+    const maxLunchMinutes =
+      typeof parsed.maxLunchMinutes === 'number' &&
+      Number.isFinite(parsed.maxLunchMinutes) &&
+      parsed.maxLunchMinutes > 0
+        ? parsed.maxLunchMinutes
+        : undefined;
+
     return {
       allowedDomains,
       ...(requireApproval !== undefined ? { requireApproval } : {}),
       ...(timezone !== undefined ? { timezone } : {}),
       ...(maxShiftHours !== undefined ? { maxShiftHours } : {}),
+      ...(maxBreakMinutes !== undefined ? { maxBreakMinutes } : {}),
+      ...(maxLunchMinutes !== undefined ? { maxLunchMinutes } : {}),
     };
   } catch {
     return null;
@@ -65,6 +82,12 @@ export function serializeOrganizationMetadata(metadata: OrganizationJoinMetadata
   }
   if (metadata.maxShiftHours !== undefined) {
     payload.maxShiftHours = metadata.maxShiftHours;
+  }
+  if (metadata.maxBreakMinutes !== undefined) {
+    payload.maxBreakMinutes = metadata.maxBreakMinutes;
+  }
+  if (metadata.maxLunchMinutes !== undefined) {
+    payload.maxLunchMinutes = metadata.maxLunchMinutes;
   }
   return JSON.stringify(payload);
 }

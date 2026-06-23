@@ -1,30 +1,18 @@
 import { prisma } from '@/lib/db/prisma';
-import { parseOrganizationMetadata } from '@/lib/organization/metadata';
+import {
+  AUTO_CLOCK_OUT_NOTE,
+  DEFAULT_MAX_SHIFT_HOURS,
+  resolveMaxShiftHours,
+} from '@/lib/organization/compliance-limits';
 import { withOrganizationScope } from '@/lib/security/organization-context';
 import { utcNow } from '@/lib/utils/time';
 
-/**
- * Default max continuous open-shift hours before automated clock-out.
- * Aligns with admin floor-monitor compliance alerts until TKT-206 ships.
- */
-export const DEFAULT_MAX_SHIFT_HOURS = 12;
-
-export const AUTO_CLOCK_OUT_NOTE =
-  '[System] Automated clock-out: shift exceeded the maximum continuous duration threshold.';
+export { AUTO_CLOCK_OUT_NOTE, DEFAULT_MAX_SHIFT_HOURS, resolveMaxShiftHours };
 
 export interface AutoClockOutJobResult {
   organizationsProcessed: number;
   segmentsClosed: number;
   errors: string[];
-}
-
-export function resolveMaxShiftHours(metadataRaw: string | null | undefined): number {
-  const metadata = parseOrganizationMetadata(metadataRaw);
-  const hours = metadata?.maxShiftHours;
-  if (typeof hours === 'number' && Number.isFinite(hours) && hours > 0) {
-    return hours;
-  }
-  return DEFAULT_MAX_SHIFT_HOURS;
 }
 
 function cutoffBefore(now: Date, maxShiftHours: number): Date {

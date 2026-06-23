@@ -6,12 +6,18 @@ import {
   resolveAvailableStatus,
 } from '@/lib/security/activity-status';
 import { resolveOrganizationContext, withOrganizationScope } from '@/lib/security/organization-context';
+import { checkMemberActive } from '@/lib/services/organization-team.service';
 import { ServiceResult } from '@/lib/types/api-response';
 import {
   formatDurationHuman,
   formatDurationHours,
   formatTimeLocal,
 } from '@/lib/utils/admin-metrics';
+import {
+  getOrganizationDayRange,
+  getOrganizationTodayDateString,
+  resolveOrganizationTimezone,
+} from '@/lib/utils/date-helpers';
 import { isProductiveType } from '@/lib/utils/status-type';
 import {
   computeDaySummaryFromSegments,
@@ -119,13 +125,6 @@ function activityDuration(startIso: string, endIso: string | null): string {
   return formatDurationHuman(Math.max(0, end - start));
 }
 
-function resolveDateRange(date: string): { rangeStart: Date; rangeEnd: Date } {
-  return {
-    rangeStart: new Date(`${date}T00:00:00.000Z`),
-    rangeEnd: new Date(`${date}T23:59:59.999Z`),
-  };
-}
-
 type TimeLogClient = Pick<typeof prisma, 'timeLog'>;
 
 function isOpenSegmentUniqueViolation(error: unknown): boolean {
@@ -172,6 +171,9 @@ export async function clockInService(
   organizationId: string,
   notes?: string
 ): Promise<ServiceResult<{ segment: TimeLogSegment }>> {
+  const activeResult = await checkMemberActive(userId, organizationId);
+  if (!activeResult.success) return activeResult;
+
   const tenantResult = await resolveOrganizationContext(userId, organizationId);
   if (!tenantResult.success) return tenantResult;
 
@@ -214,6 +216,9 @@ export async function clockOutService(
   userId: string,
   organizationId: string
 ): Promise<ServiceResult<{ segment: TimeLogSegment }>> {
+  const activeResult = await checkMemberActive(userId, organizationId);
+  if (!activeResult.success) return activeResult;
+
   const tenantResult = await resolveOrganizationContext(userId, organizationId);
   if (!tenantResult.success) return tenantResult;
 
@@ -268,6 +273,9 @@ export async function setStatusService(
   statusId?: string,
   statusName?: string
 ): Promise<ServiceResult<{ segment: TimeLogSegment | null }>> {
+  const activeResult = await checkMemberActive(userId, organizationId);
+  if (!activeResult.success) return activeResult;
+
   const tenantResult = await resolveOrganizationContext(userId, organizationId);
   if (!tenantResult.success) return tenantResult;
 
@@ -402,8 +410,19 @@ export async function getMyDayService(
   if (!tenantResult.success) return tenantResult;
 
   const tenant = tenantResult.data;
-  const resolvedDate = date ?? utcNow().toISOString().slice(0, 10);
-  const { rangeStart, rangeEnd } = resolveDateRange(resolvedDate);
+
+  const organization = await prisma.organization.findUnique({
+    where: { id: tenant.organizationId },
+    select: { timezone: true },
+  });
+
+  if (!organization) {
+    return fail(TimeTrackingErrorCodes.USER_NOT_IN_COMPANY, 'Organization not found.');
+  }
+
+  const timezone = resolveOrganizationTimezone(organization.timezone);
+  const resolvedDate = date ?? getOrganizationTodayDateString(timezone);
+  const { rangeStart, rangeEnd } = getOrganizationDayRange(timezone, resolvedDate);
 
   const [user, activityStatuses, daySegments, openSegment] = await Promise.all([
     prisma.user.findFirst({

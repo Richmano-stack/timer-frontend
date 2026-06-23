@@ -59,6 +59,24 @@ describe('parseOrganizationMetadata', () => {
       timezone: 'America/New_York',
     });
   });
+
+  it('parses compliance limit fields when present', () => {
+    const parsed = parseOrganizationMetadata(
+      JSON.stringify({
+        allowedDomains: ['acme.com'],
+        maxShiftHours: 10,
+        maxBreakMinutes: 20,
+        maxLunchMinutes: 60,
+      })
+    );
+
+    expect(parsed).toEqual({
+      allowedDomains: ['acme.com'],
+      maxShiftHours: 10,
+      maxBreakMinutes: 20,
+      maxLunchMinutes: 60,
+    });
+  });
 });
 
 describe('serializeOrganizationMetadata', () => {
@@ -75,6 +93,21 @@ describe('serializeOrganizationMetadata', () => {
     expect(JSON.parse(raw)).toEqual({
       allowedDomains: ['acme.com'],
       timezone: 'Europe/London',
+    });
+  });
+
+  it('persists compliance limits when provided', () => {
+    const raw = serializeOrganizationMetadata({
+      allowedDomains: ['acme.com'],
+      maxShiftHours: 8,
+      maxBreakMinutes: 15,
+      maxLunchMinutes: 45,
+    });
+    expect(JSON.parse(raw)).toEqual({
+      allowedDomains: ['acme.com'],
+      maxShiftHours: 8,
+      maxBreakMinutes: 15,
+      maxLunchMinutes: 45,
     });
   });
 });

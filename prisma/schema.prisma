@@ -31,6 +31,11 @@ enum JoinPolicy {
   DOMAIN_AUTO
 }
 
+enum MemberStatus {
+  ACTIVE
+  DEACTIVATED
+}
+
 model User {
   id            String    @id
   name          String
@@ -46,6 +51,7 @@ model User {
   joinRequests  JoinRequest[]
   timeLogs         TimeLog[]
   auditLogs        AuditLog[]        @relation("AuditActor")
+  timeLogAudits    TimeLogAudit[]    @relation("TimeLogAuditActor")
   idempotencyKeys  IdempotencyKey[]
 
   @@map("user")
@@ -115,6 +121,7 @@ model Organization {
   activityStatuses ActivityStatus[]
   timeLogs         TimeLog[]
   auditLogs        AuditLog[]
+  timeLogAudits    TimeLogAudit[]
   idempotencyKeys  IdempotencyKey[]
 
   @@map("organization")
@@ -125,12 +132,15 @@ model Member {
   organizationId String
   userId         String
   role           String       @default("member")
+  status         MemberStatus @default(ACTIVE)
+  lastSeenAt     DateTime?    @db.Timestamptz(3)
   createdAt      DateTime     @default(now())
   organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   user           User         @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@unique([organizationId, userId])
   @@index([userId])
+  @@index([organizationId, status])
   @@map("member")
 }
 
@@ -195,10 +205,30 @@ model TimeLog {
   user             User           @relation(fields: [userId], references: [id], onDelete: Cascade)
   organization     Organization   @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   activityStatus   ActivityStatus @relation(fields: [activityStatusId], references: [id], onDelete: Restrict)
+  audits           TimeLogAudit[]
 
   @@index([userId, organizationId, endTime])
   @@index([organizationId, startTime])
   @@map("time_log")
+}
+
+/// Append-only timesheet correction audit trail — never update or delete rows from application code.
+model TimeLogAudit {
+  id             String       @id @default(uuid())
+  organizationId String
+  timeLogId      String
+  actorUserId    String
+  reason         String
+  before         Json
+  after          Json
+  createdAt      DateTime     @default(now()) @db.Timestamptz(3)
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  timeLog        TimeLog      @relation(fields: [timeLogId], references: [id], onDelete: Cascade)
+  actor          User         @relation("TimeLogAuditActor", fields: [actorUserId], references: [id], onDelete: Cascade)
+
+  @@index([organizationId, timeLogId])
+  @@index([timeLogId, createdAt])
+  @@map("time_log_audit")
 }
 
 /// Append-only security audit trail — never update or delete rows from application code.

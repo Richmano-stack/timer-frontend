@@ -1,5 +1,10 @@
+import { MemberStatus } from '@prisma/client';
 import { prisma } from '@/lib/db/prisma';
 import { fail, TimeTrackingErrorCodes } from '@/lib/errors/time-tracking';
+import {
+  isLunchStatusName,
+  resolveComplianceLimits,
+} from '@/lib/organization/compliance-limits';
 import {
   assertOrganizationId,
   withOrganizationScope,
@@ -11,10 +16,14 @@ import {
   formatTimeLocal,
 } from '@/lib/utils/admin-metrics';
 import { AVAILABLE_STATUS_NAME, isBreakType, isProductiveType } from '@/lib/utils/status-type';
+import {
+  getOrganizationDateRange,
+  getOrganizationDayRange,
+  getOrganizationLocalDateString,
+  getOrganizationTodayDateString,
+  resolveOrganizationTimezone,
+} from '@/lib/utils/date-helpers';
 import { segmentDurationMs, utcNow } from '@/lib/utils/time';
-
-const TWELVE_HOURS_MS = 12 * 60 * 60 * 1000;
-const THIRTY_MINUTES_MS = 30 * 60 * 1000;
 
 const segmentInclude = {
   activityStatus: {
@@ -81,6 +90,7 @@ export interface TimesheetRow {
   clockOutFormatted: string;
   breakDeductions: string;
   netWorkHours: string;
+  manuallyEdited: boolean;
 }
 
 export async function getAdminOverviewService(
@@ -88,18 +98,26 @@ export async function getAdminOverviewService(
 ): Promise<ServiceResult<AdminOverviewData>> {
   assertOrganizationId(organizationId, 'getAdminOverviewService');
 
-  const organization = await prisma.organization.findUnique({ where: { id: organizationId } });
+  const organization = await prisma.organization.findUnique({
+    where: { id: organizationId },
+    select: { id: true, timezone: true, metadata: true },
+  });
   if (!organization) {
     return fail(TimeTrackingErrorCodes.USER_NOT_IN_COMPANY, 'Organization not found.');
   }
 
+  const timezone = resolveOrganizationTimezone(organization.timezone);
+  const complianceLimits = resolveComplianceLimits(organization);
   const now = utcNow();
   const nowMs = now.getTime();
-  const todayStart = new Date(now.toISOString().slice(0, 10) + 'T00:00:00.000Z');
+  const { rangeStart: todayStart } = getOrganizationDayRange(
+    timezone,
+    getOrganizationTodayDateString(timezone, now)
+  );
 
   const [members, openSegments, todaySegments] = await Promise.all([
     prisma.member.findMany({
-      where: withOrganizationScope(organizationId, {}),
+      where: withOrganizationScope(organizationId, { status: MemberStatus.ACTIVE }),
       include: { user: { select: { id: true, name: true } } },
       orderBy: { user: { name: 'asc' } },
     }),
@@ -118,7 +136,12 @@ export async function getAdminOverviewService(
     }),
   ]);
 
-  const openByUserId = new Map(openSegments.map((segment) => [segment.userId, segment]));
+  const activeUserIds = new Set(members.map((member) => member.userId));
+  const activeOpenSegments = openSegments.filter((segment) =>
+    activeUserIds.has(segment.userId)
+  );
+
+  const openByUserId = new Map(activeOpenSegments.map((segment) => [segment.userId, segment]));
 
   const breakTodayByUser = new Map<string, number>();
   for (const segment of todaySegments) {
@@ -130,43 +153,43 @@ export async function getAdminOverviewService(
     );
   }
 
-  const floorAgents: FloorAgentRow[] = await Promise.all(
-    members.map(async (member) => {
-      const open = openByUserId.get(member.userId);
+  const shiftStartByUserId = await batchFirstSegmentStarts(
+    organizationId,
+    activeOpenSegments,
+    timezone
+  );
 
-      if (!open) {
-        return {
-          userId: member.user.id,
-          employeeName: member.user.name,
-          timeLogId: null,
-          clockIn: null,
-          displayStatus: 'Clocked Out',
-          isProductive: null,
-          statusSince: null,
-          breakToday: formatDurationHuman(breakTodayByUser.get(member.userId) ?? 0),
-          isOnShift: false,
-        };
-      }
+  const floorAgents: FloorAgentRow[] = members.map((member) => {
+    const open = openByUserId.get(member.userId);
 
-      const shiftStart = await awaitFirstSegmentStart(
-        organizationId,
-        member.userId,
-        open.startTime
-      );
-
+    if (!open) {
       return {
         userId: member.user.id,
         employeeName: member.user.name,
-        timeLogId: open.id,
-        clockIn: isoField(shiftStart),
-        displayStatus: open.activityStatus.name,
-        isProductive: isProductiveType(open.activityStatus.type),
-        statusSince: isoField(open.startTime),
+        timeLogId: null,
+        clockIn: null,
+        displayStatus: 'Clocked Out',
+        isProductive: null,
+        statusSince: null,
         breakToday: formatDurationHuman(breakTodayByUser.get(member.userId) ?? 0),
-        isOnShift: true,
+        isOnShift: false,
       };
-    })
-  );
+    }
+
+    const shiftStart = shiftStartByUserId.get(member.userId) ?? open.startTime;
+
+    return {
+      userId: member.user.id,
+      employeeName: member.user.name,
+      timeLogId: open.id,
+      clockIn: isoField(shiftStart),
+      displayStatus: open.activityStatus.name,
+      isProductive: isProductiveType(open.activityStatus.type),
+      statusSince: isoField(open.startTime),
+      breakToday: formatDurationHuman(breakTodayByUser.get(member.userId) ?? 0),
+      isOnShift: true,
+    };
+  });
 
   let availableCount = 0;
   let onBreakCount = 0;
@@ -208,12 +231,12 @@ export async function getAdminOverviewService(
 
   const complianceAlerts: ComplianceAlert[] = [];
 
-  for (const open of openSegments) {
-    const shiftStart = await awaitFirstSegmentStart(organizationId, open.userId, open.startTime);
+  for (const open of activeOpenSegments) {
+    const shiftStart = shiftStartByUserId.get(open.userId) ?? open.startTime;
     const clockInIso = isoField(shiftStart);
     const elapsedMs = nowMs - shiftStart.getTime();
 
-    if (elapsedMs > TWELVE_HOURS_MS) {
+    if (elapsedMs > complianceLimits.maxShiftDurationMs) {
       complianceAlerts.push({
         userId: open.user.id,
         employeeName: open.user.name,
@@ -227,7 +250,11 @@ export async function getAdminOverviewService(
 
     if (isBreakType(open.activityStatus.type)) {
       const statusElapsedMs = nowMs - open.startTime.getTime();
-      if (statusElapsedMs > THIRTY_MINUTES_MS) {
+      const breakThresholdMs = isLunchStatusName(open.activityStatus.name)
+        ? complianceLimits.maxLunchDurationMs
+        : complianceLimits.maxBreakDurationMs;
+
+      if (statusElapsedMs > breakThresholdMs) {
         complianceAlerts.push({
           userId: open.user.id,
           employeeName: open.user.name,
@@ -245,7 +272,7 @@ export async function getAdminOverviewService(
     success: true,
     data: {
       kpis: {
-        activeShiftCount: openSegments.length,
+        activeShiftCount: activeOpenSegments.length,
         onBreakCount,
         availableCount,
         offFloorCount,
@@ -258,21 +285,57 @@ export async function getAdminOverviewService(
   };
 }
 
-async function awaitFirstSegmentStart(
+/**
+ * Resolves each open agent's shift clock-in (first segment on the org-local day
+ * of their current open segment) in one round-trip: a single findMany from the
+ * earliest per-user day boundary, then in-memory min startTime per user.
+ */
+async function batchFirstSegmentStarts(
   organizationId: string,
-  userId: string,
-  currentStart: Date
-): Promise<Date> {
-  const dayStart = new Date(currentStart.toISOString().slice(0, 10) + 'T00:00:00.000Z');
-  const firstToday = await prisma.timeLog.findFirst({
+  openSegments: Array<{ userId: string; startTime: Date }>,
+  timezone: string
+): Promise<Map<string, Date>> {
+  if (openSegments.length === 0) {
+    return new Map();
+  }
+
+  const dayStartByUserId = new Map<string, Date>();
+  let earliestDayStartMs = Number.POSITIVE_INFINITY;
+
+  for (const segment of openSegments) {
+    const localDate = getOrganizationLocalDateString(segment.startTime, timezone);
+    const { rangeStart: dayStart } = getOrganizationDayRange(timezone, localDate);
+    dayStartByUserId.set(segment.userId, dayStart);
+    earliestDayStartMs = Math.min(earliestDayStartMs, dayStart.getTime());
+  }
+
+  const userIds = [...dayStartByUserId.keys()];
+  const segments = await prisma.timeLog.findMany({
     where: withOrganizationScope(organizationId, {
-      userId,
-      startTime: { gte: dayStart },
+      userId: { in: userIds },
+      startTime: { gte: new Date(earliestDayStartMs) },
     }),
+    select: { userId: true, startTime: true },
     orderBy: { startTime: 'asc' },
-    select: { startTime: true },
   });
-  return firstToday?.startTime ?? currentStart;
+
+  const segmentsByUserId = new Map<string, Date[]>();
+  for (const segment of segments) {
+    const bucket = segmentsByUserId.get(segment.userId) ?? [];
+    bucket.push(segment.startTime);
+    segmentsByUserId.set(segment.userId, bucket);
+  }
+
+  const shiftStartByUserId = new Map<string, Date>();
+  for (const open of openSegments) {
+    const dayStart = dayStartByUserId.get(open.userId)!;
+    const dayStartMs = dayStart.getTime();
+    const userSegments = segmentsByUserId.get(open.userId) ?? [];
+    const firstOnDay = userSegments.find((startTime) => startTime.getTime() >= dayStartMs);
+    shiftStartByUserId.set(open.userId, firstOnDay ?? open.startTime);
+  }
+
+  return shiftStartByUserId;
 }
 
 export async function getTimesheetsService(
@@ -282,13 +345,16 @@ export async function getTimesheetsService(
 ): Promise<ServiceResult<{ rows: TimesheetRow[] }>> {
   assertOrganizationId(organizationId, 'getTimesheetsService');
 
-  const organization = await prisma.organization.findUnique({ where: { id: organizationId } });
+  const organization = await prisma.organization.findUnique({
+    where: { id: organizationId },
+    select: { id: true, timezone: true },
+  });
   if (!organization) {
     return fail(TimeTrackingErrorCodes.USER_NOT_IN_COMPANY, 'Organization not found.');
   }
 
-  const rangeStart = new Date(`${startDate}T00:00:00.000Z`);
-  const rangeEnd = new Date(`${endDate}T23:59:59.999Z`);
+  const timezone = resolveOrganizationTimezone(organization.timezone);
+  const { rangeStart, rangeEnd } = getOrganizationDateRange(timezone, startDate, endDate);
 
   if (rangeStart > rangeEnd) {
     return fail(TimeTrackingErrorCodes.VALIDATION_ERROR, 'startDate must be before endDate.');
@@ -305,10 +371,26 @@ export async function getTimesheetsService(
     orderBy: { startTime: 'desc' },
   });
 
+  const segmentIds = segments.map((segment) => segment.id);
+  const auditedTimeLogIds = new Set(
+    segmentIds.length === 0
+      ? []
+      : (
+          await prisma.timeLogAudit.findMany({
+            where: {
+              organizationId,
+              timeLogId: { in: segmentIds },
+            },
+            select: { timeLogId: true },
+            distinct: ['timeLogId'],
+          })
+        ).map((row) => row.timeLogId)
+  );
+
   const grouped = new Map<string, typeof segments>();
 
   for (const segment of segments) {
-    const dayKey = `${segment.userId}:${segment.startTime.toISOString().slice(0, 10)}`;
+    const dayKey = `${segment.userId}:${getOrganizationLocalDateString(segment.startTime, timezone)}`;
     const bucket = grouped.get(dayKey) ?? [];
     bucket.push(segment);
     grouped.set(dayKey, bucket);
@@ -342,6 +424,7 @@ export async function getTimesheetsService(
       clockOutFormatted: clockOutIso ? formatTimeLocal(clockOutIso) : '—',
       breakDeductions: formatDurationHuman(breakMs),
       netWorkHours: formatDurationHours(Math.max(0, grossMs - breakMs)),
+      manuallyEdited: sorted.some((segment) => auditedTimeLogIds.has(segment.id)),
     });
   }
 
