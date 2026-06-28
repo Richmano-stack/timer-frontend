@@ -30,3 +30,7 @@ yarn-error.log*
 
 *.tsbuildinfo
 next-env.d.ts
+
+# agent / IDE local context (not shipped with the app)
+/ai/
+.cursor/rules/
