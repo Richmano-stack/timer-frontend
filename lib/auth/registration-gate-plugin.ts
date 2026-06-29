@@ -2,6 +2,7 @@ import type { BetterAuthPlugin } from 'better-auth';
 import { APIError } from 'better-auth/api';
 import {
   hasPendingInvitationForEmail,
+  isInviteOAuthCallbackURL,
   isOwnerOAuthCallbackURL,
 } from '@/lib/auth/registration-policy';
 import {
@@ -61,10 +62,15 @@ export function registrationGatePlugin(): BetterAuthPlugin {
         {
           matcher: (ctx) => ctx.path === '/sign-in/social' && ctx.body?.requestSignUp === true,
           handler: async (ctx) => {
-            if (!isOwnerOAuthCallbackURL(ctx.body?.callbackURL)) {
+            const callbackURL = ctx.body?.callbackURL as string | undefined;
+            const allowed =
+              isOwnerOAuthCallbackURL(callbackURL) ||
+              isInviteOAuthCallbackURL(callbackURL);
+
+            if (!allowed) {
               throw new APIError('FORBIDDEN', {
                 message:
-                  'Google sign-up is only available when creating a new workspace.',
+                  'Google sign-up is only available when creating a new workspace or accepting an invitation.',
               });
             }
           },

@@ -30,6 +30,10 @@ function resolveInviteError(
     return 'Sign-in link is invalid or expired. Request a new link below.';
   }
 
+  if (error === 'oauth') {
+    return 'Google sign-in failed. Try again or use the email magic link below.';
+  }
+
   return null;
 }
 

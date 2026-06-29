@@ -21,3 +21,12 @@ export function buildOAuthErrorCallbackURL(
   }
   return `${returnPath}?${params.toString()}`;
 }
+
+/** OAuth success callback for token-gated invitation join (not /auth/callback). */
+export function buildInviteOAuthCallbackURL(token: string): string {
+  return `/join/invite/${token}/complete`;
+}
+
+export function buildInviteOAuthErrorCallbackURL(token: string): string {
+  return `/join/invite/${token}?error=oauth`;
+}
