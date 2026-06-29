@@ -5,7 +5,7 @@
   "scripts": {
     "dev": "next dev",
     "predev": "node scripts/prisma-generate-safe.mjs",
-    "build": "next build",
+    "build": "prisma migrate deploy && next build",
     "prebuild": "node scripts/prisma-generate-safe.mjs",
     "start": "next start",
     "lint": "eslint",
