@@ -1,4 +1,6 @@
+import { auditInvitationSent } from '@/lib/db/audit';
 import { prisma } from '@/lib/db/prisma';
+import { sendInvitationEmail } from '@/lib/email/send';
 import { InvitationErrorCodes } from '@/lib/errors/invitation';
 import { fail, TimeTrackingErrorCodes } from '@/lib/errors/time-tracking';
 import {
@@ -6,6 +8,11 @@ import {
   OrganizationRole,
 } from '@/lib/organization/roles';
 import { ServiceResult } from '@/lib/types/api-response';
+
+function buildInvitationJoinUrl(invitationId: string): string {
+  const baseUrl = process.env.NEXT_PUBLIC_APP_URL ?? 'http://localhost:3000';
+  return `${baseUrl.replace(/\/$/, '')}/join/invite/${invitationId}`;
+}
 
 const INVITATION_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 
@@ -65,6 +72,19 @@ export async function createInvitationForAdmin(
 
   const expiresAt = new Date(Date.now() + INVITATION_TTL_MS);
 
+  const [organization, inviter] = await Promise.all([
+    prisma.organization.findFirst({
+      where: { id: organizationId },
+      select: { name: true },
+    }),
+    prisma.user.findFirst({
+      where: { id: inviterId },
+      select: { name: true },
+    }),
+  ]);
+
+  const orgName = organization?.name ?? 'your organization';
+
   const invitation = await prisma.invitation.create({
     data: {
       id: crypto.randomUUID(),
@@ -85,13 +105,31 @@ export async function createInvitationForAdmin(
     },
   });
 
-  console.info('[invitation] Email stub', {
-    to: invitation.email,
+  void auditInvitationSent({
     organizationId,
+    actorUserId: inviterId,
     invitationId: invitation.id,
-    role: invitation.role,
-    expiresAt: invitation.expiresAt.toISOString(),
+    metadata: {
+      email: invitation.email,
+      role: invitation.role,
+    },
   });
+
+  try {
+    await sendInvitationEmail(invitation.email, {
+      url: buildInvitationJoinUrl(invitation.id),
+      orgName,
+      inviterName: inviter?.name ?? undefined,
+      expiresAt: invitation.expiresAt,
+    });
+  } catch (error) {
+    console.error('[invitation] Failed to send invitation email', {
+      organizationId,
+      invitationId: invitation.id,
+      to: invitation.email,
+      error,
+    });
+  }
 
   return {
     success: true,

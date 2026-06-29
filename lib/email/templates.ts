@@ -13,6 +13,10 @@ export interface InvitationEmailParams {
   expiresAt: Date | string;
 }
 
+export interface ResetPasswordEmailParams {
+  url: string;
+}
+
 function escapeHtml(value: string): string {
   return value
     .replaceAll('&', '&amp;')
@@ -132,6 +136,18 @@ export function invitationEmail(params: InvitationEmailParams): string {
     ctaLabel: 'Accept invitation',
     ctaUrl: params.url,
     footerNote: `If you were not expecting this invitation, you can ignore this email. Sent by ${BRAND_NAME}.`,
+  });
+}
+
+export function resetPasswordEmail(params: ResetPasswordEmailParams): string {
+  return emailLayout({
+    preheader: `Reset your ${BRAND_NAME} password.`,
+    headline: 'Reset your password',
+    bodyHtml: `<p style="margin:0 0 16px 0;">We received a request to reset the password for your ${escapeHtml(BRAND_NAME)} account.</p>
+      <p style="margin:0;">Click the button below to choose a new password. This link expires in one hour and can only be used once.</p>`,
+    ctaLabel: 'Reset password',
+    ctaUrl: params.url,
+    footerNote: `If you did not request a password reset, you can safely ignore this email. Sent by ${BRAND_NAME}.`,
   });
 }
 

@@ -4,11 +4,23 @@ import { InvitationErrorCodes } from '@/lib/errors/invitation';
 const {
   mockInvitationFindMany,
   mockInvitationFindFirst,
+  mockInvitationCreate,
   mockInvitationUpdate,
+  mockMemberFindFirst,
+  mockOrganizationFindFirst,
+  mockUserFindFirst,
+  mockSendInvitationEmail,
+  mockAuditInvitationSent,
 } = vi.hoisted(() => ({
   mockInvitationFindMany: vi.fn(),
   mockInvitationFindFirst: vi.fn(),
+  mockInvitationCreate: vi.fn(),
   mockInvitationUpdate: vi.fn(),
+  mockMemberFindFirst: vi.fn(),
+  mockOrganizationFindFirst: vi.fn(),
+  mockUserFindFirst: vi.fn(),
+  mockSendInvitationEmail: vi.fn(),
+  mockAuditInvitationSent: vi.fn(),
 }));
 
 vi.mock('@/lib/db/prisma', () => ({
@@ -16,17 +28,37 @@ vi.mock('@/lib/db/prisma', () => ({
     invitation: {
       findMany: mockInvitationFindMany,
       findFirst: mockInvitationFindFirst,
+      create: mockInvitationCreate,
       update: mockInvitationUpdate,
+    },
+    member: {
+      findFirst: mockMemberFindFirst,
+    },
+    organization: {
+      findFirst: mockOrganizationFindFirst,
+    },
+    user: {
+      findFirst: mockUserFindFirst,
     },
   },
 }));
 
+vi.mock('@/lib/email/send', () => ({
+  sendInvitationEmail: mockSendInvitationEmail,
+}));
+
+vi.mock('@/lib/db/audit', () => ({
+  auditInvitationSent: mockAuditInvitationSent,
+}));
+
 import {
+  createInvitationForAdmin,
   listPendingInvitationsForAdmin,
   revokeInvitationForAdmin,
 } from '@/lib/services/invitation.service';
 
 const ORG_ID = 'org-123';
+const INVITER_ID = 'user-inviter';
 const INVITATION_ID = 'invitation-123';
 const NOW = new Date('2026-06-22T12:00:00.000Z');
 
@@ -43,10 +75,67 @@ beforeEach(() => {
   vi.clearAllMocks();
   vi.useFakeTimers();
   vi.setSystemTime(NOW);
+  process.env.NEXT_PUBLIC_APP_URL = 'https://app.example.com';
+  mockMemberFindFirst.mockResolvedValue(null);
+  mockInvitationFindFirst.mockResolvedValue(null);
+  mockOrganizationFindFirst.mockResolvedValue({ name: 'Acme Call Center' });
+  mockUserFindFirst.mockResolvedValue({ name: 'Admin User' });
+  mockSendInvitationEmail.mockResolvedValue(undefined);
+  mockAuditInvitationSent.mockResolvedValue(undefined);
 });
 
 afterEach(() => {
   vi.useRealTimers();
+  delete process.env.NEXT_PUBLIC_APP_URL;
+});
+
+describe('createInvitationForAdmin', () => {
+  it('creates invitation, sends email, and records audit', async () => {
+    mockInvitationCreate.mockResolvedValue(pendingInvitation);
+
+    const result = await createInvitationForAdmin(
+      ORG_ID,
+      INVITER_ID,
+      'owner',
+      'agent@example.com',
+      'member'
+    );
+
+    expect(result.success).toBe(true);
+    expect(mockSendInvitationEmail).toHaveBeenCalledWith('agent@example.com', {
+      url: 'https://app.example.com/join/invite/invitation-123',
+      orgName: 'Acme Call Center',
+      inviterName: 'Admin User',
+      expiresAt: pendingInvitation.expiresAt,
+    });
+    expect(mockAuditInvitationSent).toHaveBeenCalledWith({
+      organizationId: ORG_ID,
+      actorUserId: INVITER_ID,
+      invitationId: INVITATION_ID,
+      metadata: {
+        email: 'agent@example.com',
+        role: 'member',
+      },
+    });
+  });
+
+  it('returns success when email send fails', async () => {
+    mockInvitationCreate.mockResolvedValue(pendingInvitation);
+    mockSendInvitationEmail.mockRejectedValue(new Error('Resend unavailable'));
+
+    const result = await createInvitationForAdmin(
+      ORG_ID,
+      INVITER_ID,
+      'owner',
+      'agent@example.com',
+      'member'
+    );
+
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.id).toBe(INVITATION_ID);
+    }
+  });
 });
 
 describe('listPendingInvitationsForAdmin', () => {

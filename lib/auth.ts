@@ -9,7 +9,7 @@ import {
   registrationGatePlugin,
 } from '@/lib/auth/registration-gate-plugin';
 import { consumeRegistrationPermit } from '@/lib/auth/registration-permit';
-import { sendMagicLinkEmail } from '@/lib/email/send';
+import { sendMagicLinkEmail, sendResetPasswordEmail } from '@/lib/email/send';
 import { magicLinkEmail } from '@/lib/email/templates';
 
 export const auth = betterAuth({
@@ -20,6 +20,9 @@ export const auth = betterAuth({
   baseURL: process.env.BETTER_AUTH_URL,
   emailAndPassword: {
     enabled: true,
+    async sendResetPassword({ user, url }) {
+      await sendResetPasswordEmail(user.email, url);
+    },
   },
   socialProviders: {
     google: {

@@ -7,7 +7,9 @@ import {
 } from '@/lib/auth/registration-permit';
 import {
   assertRegistrationAllowed,
+  isInviteOAuthCallbackURL,
   isOwnerOAuthCallbackURL,
+  parseInviteTokenFromOAuthCallback,
 } from '@/lib/auth/registration-policy';
 
 vi.mock('@/lib/services/join.service', () => ({
@@ -132,5 +134,24 @@ describe('isOwnerOAuthCallbackURL', () => {
 
   it('rejects login callbacks that include a next path', () => {
     expect(isOwnerOAuthCallbackURL('/auth/callback?next=/employee/track')).toBe(false);
+  });
+});
+
+describe('isInviteOAuthCallbackURL', () => {
+  it('accepts invite completion callback paths', () => {
+    expect(
+      isInviteOAuthCallbackURL('/join/invite/abc-123-def/complete')
+    ).toBe(true);
+  });
+
+  it('rejects non-invite callback paths', () => {
+    expect(isInviteOAuthCallbackURL('/auth/callback')).toBe(false);
+    expect(isInviteOAuthCallbackURL('/join/invite/abc-123')).toBe(false);
+  });
+
+  it('parses invitation token from callback URL', () => {
+    expect(
+      parseInviteTokenFromOAuthCallback('/join/invite/token-uuid/complete')
+    ).toBe('token-uuid');
   });
 });

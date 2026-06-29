@@ -3,6 +3,7 @@ import {
   extractPrimaryLinkFromHtml,
   invitationEmail,
   magicLinkEmail,
+  resetPasswordEmail,
 } from '@/lib/email/templates';
 
 describe('email templates', () => {
@@ -51,6 +52,15 @@ describe('email templates', () => {
     expect(html).toContain('Accept invitation');
     expect(html).toContain('https://app.example.com/join/invite/abc-123');
     expect(html).toContain('June 17, 2026');
+  });
+
+  it('renders a reset password email', () => {
+    const html = resetPasswordEmail({
+      url: 'https://app.example.com/api/auth/reset-password/token?callbackURL=...',
+    });
+
+    expect(html).toContain('Reset your password');
+    expect(html).toContain('https://app.example.com/api/auth/reset-password/token');
   });
 
   it('extracts the primary CTA link from rendered HTML', () => {
@@ -213,5 +223,63 @@ describe('sendInvitationEmail', () => {
     expect(body.to).toEqual(['invitee@example.com']);
     expect(body.html).toContain('Demo Company');
     expect(body.html).toContain('https://app.example.com/join/invite/token-1');
+  });
+});
+
+describe('sendResetPasswordEmail', () => {
+  const originalEnv = { ...process.env };
+
+  beforeEach(() => {
+    vi.stubGlobal('fetch', vi.fn());
+    vi.resetModules();
+    process.env = { ...originalEnv };
+    delete process.env.RESEND_API_KEY;
+    delete process.env.EMAIL_FROM;
+    process.env.NODE_ENV = 'development';
+  });
+
+  afterEach(() => {
+    process.env = originalEnv;
+    vi.unstubAllGlobals();
+    vi.restoreAllMocks();
+  });
+
+  it('logs a dev stub when no provider API key is configured', async () => {
+    const infoSpy = vi.spyOn(console, 'info').mockImplementation(() => {});
+
+    const { sendResetPasswordEmail } = await import('@/lib/email/send');
+
+    await sendResetPasswordEmail(
+      'user@example.com',
+      'https://app.example.com/api/auth/reset-password/abc'
+    );
+
+    expect(fetch).not.toHaveBeenCalled();
+    expect(infoSpy).toHaveBeenCalledWith(
+      '[email] Dev stub — reset-password (no API key configured)',
+      expect.objectContaining({
+        to: 'user@example.com',
+        url: 'https://app.example.com/api/auth/reset-password/abc',
+      })
+    );
+  });
+
+  it('sends via Resend when RESEND_API_KEY and EMAIL_FROM are set', async () => {
+    process.env.RESEND_API_KEY = 're_test_key';
+    process.env.EMAIL_FROM = 'noreply@example.com';
+
+    vi.mocked(fetch).mockResolvedValue(new Response(null, { status: 200 }));
+
+    const { sendResetPasswordEmail } = await import('@/lib/email/send');
+
+    await sendResetPasswordEmail(
+      'user@example.com',
+      'https://app.example.com/api/auth/reset-password/abc'
+    );
+
+    expect(fetch).toHaveBeenCalledOnce();
+    const body = JSON.parse(String(vi.mocked(fetch).mock.calls[0]?.[1]?.body));
+    expect(body.subject).toBe('Reset your OmniShift password');
+    expect(body.html).toContain('Reset password');
   });
 });

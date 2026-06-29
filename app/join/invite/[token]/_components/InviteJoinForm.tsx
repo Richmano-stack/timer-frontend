@@ -2,8 +2,13 @@
 
 import Link from 'next/link';
 import { FormEvent, useState } from 'react';
+import { GoogleSignInButton } from '@/components/auth/google-sign-in-button';
 import { AuthBrand } from '@/components/auth-brand';
 import { api, ApiError } from '@/lib/api';
+import {
+  buildInviteOAuthCallbackURL,
+  buildInviteOAuthErrorCallbackURL,
+} from '@/lib/auth/oauth-callback-url';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import {
@@ -20,6 +25,7 @@ import {
   FieldLabel,
 } from '@/components/ui/field';
 import { Input } from '@/components/ui/input';
+import { Separator } from '@/components/ui/separator';
 
 interface InviteJoinFormProps extends React.ComponentProps<'div'> {
   token: string;
@@ -63,6 +69,9 @@ export function InviteJoinForm({
     }
   };
 
+  const oauthCallbackURL = buildInviteOAuthCallbackURL(token);
+  const oauthErrorCallbackURL = buildInviteOAuthErrorCallbackURL(token);
+
   return (
     <div className={cn('flex flex-col gap-6', className)} {...props}>
       <AuthBrand />
@@ -70,12 +79,29 @@ export function InviteJoinForm({
         <CardHeader>
           <CardTitle>Join {orgName}</CardTitle>
           <CardDescription>
-            You were invited as {maskedEmail}. Confirm your email to receive a secure
-            sign-in link.
+            You were invited as {maskedEmail}. Continue with Google or confirm your email
+            for a secure sign-in link.
           </CardDescription>
         </CardHeader>
         <CardContent>
-          <form onSubmit={handleSubmit}>
+          <FieldGroup>
+            <GoogleSignInButton
+              callbackURL={oauthCallbackURL}
+              errorCallbackURL={oauthErrorCallbackURL}
+              disabled={isSubmitting || Boolean(success)}
+              onError={setError}
+              requestSignUp
+            />
+            <div className="relative">
+              <div className="absolute inset-0 flex items-center">
+                <Separator />
+              </div>
+              <div className="relative flex justify-center text-xs uppercase">
+                <span className="bg-card px-2 text-muted-foreground">Or use email</span>
+              </div>
+            </div>
+          </FieldGroup>
+          <form onSubmit={handleSubmit} className="mt-6">
             <FieldGroup>
               <Field>
                 <FieldLabel htmlFor="organization">Organization</FieldLabel>

@@ -3,6 +3,7 @@ import {
   extractPrimaryLinkFromHtml,
   invitationEmail,
   type InvitationEmailParams,
+  resetPasswordEmail,
 } from '@/lib/email/templates';
 
 type EmailProvider = 'resend' | 'postmark' | 'sendgrid';
@@ -158,7 +159,7 @@ function logDevEmailStub(options: {
   to: string;
   subject: string;
   html: string;
-  kind: 'magic-link' | 'invitation' | 'transactional';
+  kind: 'magic-link' | 'invitation' | 'transactional' | 'reset-password';
 }): void {
   const isProduction = process.env.NODE_ENV === 'production';
   const url = extractPrimaryLinkFromHtml(options.html);
@@ -203,6 +204,22 @@ export async function sendInvitationEmail(
 
   if (!isEmailDeliveryConfigured(config)) {
     logDevEmailStub({ to, subject, html, kind: 'invitation' });
+    return;
+  }
+
+  await deliverEmail(to, subject, html);
+}
+
+export async function sendResetPasswordEmail(
+  to: string,
+  url: string
+): Promise<void> {
+  const subject = `Reset your ${BRAND_NAME} password`;
+  const html = resetPasswordEmail({ url });
+  const config = readEmailRuntimeConfig();
+
+  if (!isEmailDeliveryConfigured(config)) {
+    logDevEmailStub({ to, subject, html, kind: 'reset-password' });
     return;
   }
 

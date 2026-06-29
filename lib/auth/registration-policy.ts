@@ -99,3 +99,25 @@ export function isOwnerOAuthCallbackURL(callbackURL: string | undefined): boolea
     return false;
   }
 }
+
+const INVITE_COMPLETE_PATH = /^\/join\/invite\/([^/]+)\/complete$/;
+
+export function parseInviteTokenFromOAuthCallback(
+  callbackURL: string | undefined
+): string | null {
+  if (!callbackURL?.trim()) {
+    return null;
+  }
+
+  try {
+    const url = new URL(callbackURL, 'http://localhost');
+    const match = url.pathname.match(INVITE_COMPLETE_PATH);
+    return match?.[1] ?? null;
+  } catch {
+    return null;
+  }
+}
+
+export function isInviteOAuthCallbackURL(callbackURL: string | undefined): boolean {
+  return parseInviteTokenFromOAuthCallback(callbackURL) !== null;
+}

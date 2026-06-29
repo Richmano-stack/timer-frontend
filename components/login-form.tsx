@@ -42,6 +42,7 @@ export function LoginForm({
   const [email, setEmail] = useState(IS_DEV ? 'demo@example.com' : '');
   const [password, setPassword] = useState(IS_DEV ? 'DemoPassword1!' : '');
   const [error, setError] = useState<string | null>(null);
+  const [resetSuccess, setResetSuccess] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   useEffect(() => {
@@ -55,6 +56,11 @@ export function LoginForm({
       setError(
         'No account was found for this Google identity. Ask your administrator for an invitation link.'
       );
+      return;
+    }
+
+    if (searchParams.get('reset') === 'success') {
+      setResetSuccess(true);
     }
   }, [searchParams]);
 
@@ -118,6 +124,11 @@ export function LoginForm({
               </div>
             </div>
           </FieldGroup>
+          {resetSuccess && (
+            <p className="mt-4 rounded-lg border border-border bg-muted/40 px-3 py-2 text-sm text-foreground">
+              Your password was updated. Sign in with your new password.
+            </p>
+          )}
           <form onSubmit={handleSubmit} className="mt-6">
             <FieldGroup>
               <Field>
@@ -134,7 +145,15 @@ export function LoginForm({
                 />
               </Field>
               <Field>
-                <FieldLabel htmlFor="password">Password</FieldLabel>
+                <div className="flex items-center justify-between">
+                  <FieldLabel htmlFor="password">Password</FieldLabel>
+                  <Link
+                    href="/forgot-password"
+                    className="text-sm underline-offset-4 hover:underline"
+                  >
+                    Forgot password?
+                  </Link>
+                </div>
                 <Input
                   id="password"
                   type="password"
